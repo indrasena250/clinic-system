@@ -14,8 +14,25 @@ const app = express();
 
 app.use(helmet());
 
+import cors from "cors";
+
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://clinic-system-tau.vercel.app"
+];
+
 app.use(cors({
-  origin: "*"
+  origin: function (origin, callback) {
+    // allow requests with no origin (like Postman)
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("CORS not allowed"));
+    }
+  },
+  credentials: true
 }));
 
 app.use(express.json());
