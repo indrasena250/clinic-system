@@ -1,0 +1,79 @@
+import { Routes, Route, Navigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+
+import Login from "../pages/Login";
+import DashboardLayout from "../layouts/DashboardLayout";
+import Dashboard from "../pages/Dashboard";
+
+// Patients
+import AddPatient from "../pages/patients/AddPatient";
+import CTList from "../pages/patients/CTList";
+import UltrasoundList from "../pages/patients/UltrasoundList";
+
+// Referrals
+import DoctorReferrals from "../pages/referrals/DoctorReferrals";
+import DoctorSettlement from "../pages/referrals/DoctorSettlement";
+
+// Finance
+import DailyExpense from "../pages/finance/DailyExpense";
+import ExtraIncome from "../pages/finance/ExtraIncome";
+
+// Reports
+import DailyReport from "../pages/reports/DailyReport";
+
+// Settings
+import UploadSignature from "../pages/settings/UploadSignature";
+
+const AppRoutes = () => {
+
+  const { user } = useAuth();
+
+  return (
+    <Routes>
+
+      {/* Login */}
+      <Route
+        path="/login"
+        element={!user ? <Login /> : <Navigate to="/" />}
+      />
+
+      {/* Protected Routes */}
+      {user && (
+        <Route path="/" element={<DashboardLayout />}>
+
+          {/* Dashboard */}
+          <Route index element={<Dashboard />} />
+
+          {/* Patients */}
+          <Route path="patients/add" element={<AddPatient />} />
+          <Route path="patients/ct" element={<CTList />} />
+          <Route path="patients/ultrasound" element={<UltrasoundList />} />
+
+          {/* Doctor */}
+          <Route path="referrals" element={<DoctorReferrals />} />
+          <Route path="doctor-settlement" element={<DoctorSettlement />} />
+
+          {/* Finance */}
+          <Route path="finance/expenses" element={<DailyExpense />} />
+          <Route path="finance/income" element={<ExtraIncome />} />
+
+          {/* Reports */}
+          <Route path="reports/daily" element={<DailyReport />} />
+
+          {/* Settings */}
+          <Route path="settings/signature" element={<UploadSignature />} />
+
+        </Route>
+      )}
+
+      {/* Redirect Unknown Routes */}
+      <Route
+        path="*"
+        element={<Navigate to={user ? "/" : "/login"} />}
+      />
+
+    </Routes>
+  );
+};
+
+export default AppRoutes;

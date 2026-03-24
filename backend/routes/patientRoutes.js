@@ -1,0 +1,1919 @@
+const { authorize } = require("../middleware/roleMiddleware");
+const { protect } = require("../middleware/authMiddleware");
+const express = require("express");
+const router = express.Router();
+const db = require("../config/db");
+const pool = require("../config/db");
+const dayjs = require("dayjs");
+const multer = require("multer");
+const path = require("path");
+const fs = require("fs");
+
+// Ensure signature directory exists
+const signatureDir = path.join(__dirname, "../uploads/signature");
+if (!fs.existsSync(signatureDir)) {
+  fs.mkdirSync(signatureDir, { recursive: true });
+}
+
+// Multer storage for signature
+const signatureStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, signatureDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueName = `signature-${Date.now()}${path.extname(file.originalname)}`;
+    cb(null, uniqueName);
+  }
+});
+
+const uploadSignature = multer({
+  storage: signatureStorage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith("image/")) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only image files are allowed"));
+    }
+  }
+});
+
+async function getSettlementWindow() {
+  // Use a fixed daily window 4:30 PM -> 4:30 PM for the current time.
+  const now = dayjs();
+  return getWindowForDate(now.format("YYYY-MM-DD"));
+}
+
+function getWindowForDate(date) {
+  const day = dayjs(date, "YYYY-MM-DD");
+  // For the selected date, window is: previous day 4:30 PM -> selected day 4:30 PM
+  const to = day.hour(16).minute(30).second(0).millisecond(0);
+  const from = to.subtract(1, "day");
+
+  return {
+    from: from.format("YYYY-MM-DD HH:mm:ss"),
+    to: to.format("YYYY-MM-DD HH:mm:ss")
+  };
+}
+
+/* =========================================
+   ADD NEW PATIENT
+========================================= */
+router.post("/add", protect, authorize("admin", "staff"), async (req, res) => {
+  try {
+    const clinicId = req.user?.clinic_id ?? 1;
+    const {
+      upload_date,
+      patient_name,
+      age,
+      gender,
+      mobile,
+      address,
+      scan_category,
+      scan_name,
+      referred_doctor,
+      amount,
+      referral_amount
+    } = req.body;
+
+    // If upload_date is just a date (YYYY-MM-DD), append current time
+    let finalDate = upload_date;
+    if (upload_date && upload_date.length === 10) {
+      finalDate = dayjs(upload_date).format("YYYY-MM-DD") + " " + dayjs().format("HH:mm:ss");
+    }
+
+    const sql = `
+      INSERT INTO patients
+      (clinic_id, upload_date, patient_name, age, gender, mobile, address, scan_category, scan_name, referred_doctor, amount, referral_amount, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+    `;
+
+    const [result] = await db.query(sql, [
+      clinicId,
+      finalDate,
+      patient_name,
+      age,
+      gender,
+      mobile,
+      address || null,
+      scan_category,
+      scan_name,
+      referred_doctor,
+      amount,
+      referral_amount || 0
+    ]);
+
+    const patientId = result.insertId;
+
+    if (referral_amount && referral_amount > 0) {
+      const referralSql = `
+        INSERT INTO doctor_referrals (clinic_id, patient_id, doctor_name, referral_amount, payment_status)
+        VALUES (?, ?, ?, ?, 'Balance')
+      `;
+      await db.query(referralSql, [clinicId, patientId, referred_doctor, referral_amount]);
+    }
+
+    res.status(201).json({
+      message: "Patient added successfully"
+    });
+
+  } catch (error) {
+
+    console.error(error);
+
+    res.status(500).json({
+      message: "Error adding patient"
+    });
+
+  }
+});
+/* =========================================
+   GET ALL PATIENTS (Latest First)
+========================================= */
+router.get("/all", protect, authorize("admin", "staff"), async (req, res) => {
+  try {
+    const clinicId = req.user?.clinic_id ?? 1;
+    const [rows] = await pool.query(
+      `SELECT id, patient_name, scan_name, upload_date, referred_doctor, amount, referral_amount, referral_status
+       FROM patients WHERE clinic_id = ? ORDER BY upload_date DESC`,
+      [clinicId]
+    );
+    res.json(rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Failed to fetch patients" });
+  }
+});
+/* =========================================
+   GET CT PATIENTS ONLY
+========================================= */
+router.get("/ct", protect, authorize("admin", "staff"), async (req, res) => {
+    try {
+        const clinicId = req.user?.clinic_id ?? 1;
+        const [rows] = await db.query(
+            `SELECT * FROM patients WHERE clinic_id = ? AND scan_category = 'CT' ORDER BY upload_date DESC, id DESC`,
+            [clinicId]
+        );
+        res.json(rows);
+
+    } catch (error) {
+        res.status(500).json({ message: "Error fetching CT records" });
+    }
+});
+
+/* =========================================
+   GET ULTRASOUND PATIENTS ONLY
+========================================= */
+router.get("/ultrasound", protect, authorize("admin", "staff"), async (req, res) => {
+    try {
+        const clinicId = req.user?.clinic_id ?? 1;
+        const [rows] = await db.query(
+            `SELECT * FROM patients WHERE clinic_id = ? AND scan_category = 'Ultrasound' ORDER BY upload_date DESC, id DESC`,
+            [clinicId]
+        );
+        res.json(rows);
+
+    } catch (error) {
+        res.status(500).json({ message: "Error fetching Ultrasound records" });
+    }
+});
+/* =========================================
+   COMPLETE DAILY FINANCIAL REPORT
+========================================= */
+router.get(
+  "/daily-report/:date",
+  protect,
+  authorize("admin", "staff"),
+  async (req, res) => {
+
+    try {
+      const clinicId = req.user?.clinic_id ?? 1;
+      const { date } = req.params;
+
+      const [todayIncome] = await db.query(
+        `SELECT SUM(amount) AS totalIncome,
+                SUM(CASE WHEN scan_category='Ultrasound' THEN amount ELSE 0 END) AS ultrasoundIncome,
+                SUM(CASE WHEN scan_category='CT' THEN amount ELSE 0 END) AS ctIncome
+         FROM patients WHERE clinic_id = ? AND upload_date = ?`,
+        [clinicId, date]
+      );
+
+      const todayTotalIncome = todayIncome[0]?.totalIncome || 0;
+      const todayUltrasound = todayIncome[0]?.ultrasoundIncome || 0;
+      const todayCT = todayIncome[0]?.ctIncome || 0;
+
+      const [expenseResult] = await db.query(
+        `SELECT IFNULL(SUM(amount),0) AS totalExpense FROM expenses WHERE clinic_id = ? AND expense_date = ?`,
+        [clinicId, date]
+      );
+
+      const totalExpense = expenseResult[0]?.totalExpense || 0;
+
+      const [referralResult] = await db.query(
+        `SELECT IFNULL(SUM(d.referral_amount),0) AS totalReferral
+         FROM doctor_referrals d
+         JOIN patients p ON d.patient_id = p.id
+         WHERE p.clinic_id = ? AND p.upload_date = ?`,
+        [clinicId, date]
+      );
+
+      const totalReferral = referralResult[0]?.totalReferral || 0;
+      const netIncome = todayTotalIncome - totalReferral - totalExpense;
+
+      const [overallIncome] = await db.query(
+        `SELECT SUM(amount) AS overallIncome,
+                SUM(CASE WHEN scan_category='Ultrasound' THEN amount ELSE 0 END) AS totalUltrasound,
+                SUM(CASE WHEN scan_category='CT' THEN amount ELSE 0 END) AS totalCT
+         FROM patients WHERE clinic_id = ?`,
+        [clinicId]
+      );
+
+      const overallTotalIncome = overallIncome[0]?.overallIncome || 0;
+      const totalUltrasound = overallIncome[0]?.totalUltrasound || 0;
+      const totalCT = overallIncome[0]?.totalCT || 0;
+
+      const [overallExpense] = await db.query(
+        `SELECT IFNULL(SUM(amount),0) AS overallExpense FROM expenses WHERE clinic_id = ?`,
+        [clinicId]
+      );
+
+      const overallExpenseTotal = overallExpense[0]?.overallExpense || 0;
+
+      const overallNet = overallTotalIncome - overallExpenseTotal;
+
+      /* ================= RESPONSE ================= */
+
+      res.json({
+
+        todayUltrasound,
+        todayCT,
+        todayIncome: todayTotalIncome,
+        todayExpense: totalExpense,
+        todayNet: netIncome,
+
+        totalUltrasound,
+        totalCT,
+        overallIncome: overallTotalIncome,
+        overallExpense: overallExpenseTotal,
+        overallNet,
+
+        referralBalance: totalReferral
+
+      });
+
+    } catch (error) {
+
+      console.error("Dashboard error:", error);
+
+      res.status(500).json({
+        message: "Dashboard summary error"
+      });
+
+    }
+
+  }
+);
+/* =========================================
+   GET DOCTOR REFERRAL REPORT (By Doctor)
+========================================= */
+router.get("/doctor-report/:doctor", protect, authorize("admin"), async (req, res) => {
+    try {
+        const clinicId = req.user?.clinic_id ?? 1;
+        const { doctor } = req.params;
+
+        const [results] = await db.query(
+            `SELECT p.upload_date, p.patient_name, p.scan_category, p.scan_name, d.referral_amount, d.payment_status
+             FROM doctor_referrals d
+             JOIN patients p ON d.patient_id = p.id
+             WHERE d.clinic_id = ? AND d.doctor_name = ?
+             ORDER BY p.scan_category DESC, p.upload_date DESC`,
+            [clinicId, doctor]
+        );
+
+        let totalReferral = 0;
+        let paidTotal = 0;
+        let balanceTotal = 0;
+
+        results.forEach(record => {
+            const amount = Number(record.referral_amount) || 0;
+            totalReferral += amount;
+
+            if (record.payment_status === "Paid") {
+                paidTotal += amount;
+            } else {
+                balanceTotal += amount;
+            }
+        });
+
+        res.json({
+            doctor,
+            totalReferral,
+            paidTotal,
+            balanceTotal,
+            records: results
+        });
+
+    } catch (error) {
+        res.status(500).json({ message: "Error fetching doctor report" });
+    }
+});
+/* =========================================
+   EDIT PATIENT DETAILS
+========================================= */
+
+router.put("/:id", protect, authorize("admin"), async (req, res) => {
+  const { id } = req.params;
+  const clinicId = req.user?.clinic_id ?? 1;
+
+  const {
+    patient_name,
+    age,
+    gender,
+    mobile,
+    address,
+    scan_category,
+    scan_name,
+    referred_doctor,
+    amount,
+    upload_date,
+  } = req.body;
+
+  // If upload_date is just a date (YYYY-MM-DD), append current time
+  let finalDate = upload_date;
+  if (upload_date && upload_date.length === 10) {
+    // Only date provided, add current time
+    finalDate = dayjs(upload_date).format("YYYY-MM-DD") + " " + dayjs().format("HH:mm:ss");
+  }
+
+  try {
+    const [r] = await pool.query(
+      `UPDATE patients SET patient_name=?, age=?, gender=?, mobile=?, address=?,
+       scan_category=?, scan_name=?, referred_doctor=?, amount=?, upload_date=?
+       WHERE id=? AND clinic_id=?`,
+      [patient_name, age, gender, mobile, address ?? null, scan_category, scan_name, referred_doctor, amount, finalDate, id, clinicId]
+    );
+    if (r.affectedRows === 0) return res.status(404).json({ message: "Patient not found" });
+    res.json({ message: "Patient updated successfully" });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+/* =========================================
+   REFERRAL UPDATE (Amount & Status)
+========================================= */
+router.put("/referral/:id", protect, authorize("admin", "staff"), async (req, res) => {
+  const { id } = req.params;
+  const clinicId = req.user?.clinic_id ?? 1;
+  let { referral_amount, referral_status } = req.body;
+
+  try {
+    referral_amount = Number(referral_amount) || 0;
+    if (!referral_amount || referral_amount === 0) {
+      const [currentRow] = await pool.query(
+        `SELECT referral_amount FROM patients WHERE id = ? AND clinic_id = ?`,
+        [id, clinicId]
+      );
+      
+      if (currentRow.length > 0 && currentRow[0].referral_amount) {
+        referral_amount = currentRow[0].referral_amount;
+      }
+    }
+
+    const [r] = await pool.query(
+      `UPDATE patients SET referral_amount = ?, referral_status = ? WHERE id = ? AND clinic_id = ?`,
+      [referral_amount, referral_status, id, clinicId]
+    );
+    if (r.affectedRows === 0) return res.status(404).json({ message: "Patient not found" });
+    res.json({ message: "Referral updated successfully" });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Failed to update referral" });
+  }
+
+});
+/* =========================================
+   MARK REFERRAL AS PAID
+========================================= */
+router.put("/mark-paid/:id", protect, authorize("admin"), (req, res) => {
+    const clinicId = req.user?.clinic_id ?? 1;
+    const { id } = req.params;
+
+    const sql = `UPDATE doctor_referrals SET payment_status = 'Paid', payment_date = CURDATE() WHERE id = ? AND clinic_id = ?`;
+
+    db.query(sql, [id, clinicId], (err, result) => {
+        if (err) {
+            return res.status(500).json({ message: "Error updating payment status" });
+        }
+
+        res.json({ message: "Referral marked as Paid" });
+    });
+});
+router.post("/add-referral", protect, authorize("admin"), (req, res) => {
+    const clinicId = req.user?.clinic_id ?? 1;
+    const { patient_id, doctor_name, referral_amount } = req.body;
+
+    const sql = `INSERT INTO doctor_referrals (clinic_id, patient_id, doctor_name, referral_amount) VALUES (?, ?, ?, ?)`;
+    db.query(sql, [clinicId, patient_id, doctor_name, referral_amount], (err, result) => {
+        if (err) {
+            return res.status(500).json({ message: "Error adding referral" });
+        }
+
+        res.json({ message: "Referral amount added successfully" });
+    });
+});
+/* =========================================
+   Doctor SETTLEMENT REPORT
+========================================= */
+router.get(
+  "/doctors",
+  protect,  
+  authorize("admin", "staff"),
+  async (req, res) => {
+    try {
+      const clinicId = req.user?.clinic_id ?? 1;
+      const [rows] = await pool.query(
+        `SELECT DISTINCT referred_doctor FROM patients WHERE clinic_id = ? AND referred_doctor IS NOT NULL ORDER BY referred_doctor`,
+        [clinicId]
+      );
+      res.json(rows);
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: "Failed to fetch doctors" });
+    }
+  }
+);
+router.get(
+  "/doctor-settlement/:doctor",
+  protect,
+  authorize("admin", "staff"),
+  async (req, res) => {
+    const clinicId = req.user?.clinic_id ?? 1;
+    const { doctor } = req.params;
+
+    try {
+      const [rows] = await pool.query(
+        `SELECT upload_date, patient_name, scan_name, referral_amount
+         FROM patients WHERE clinic_id = ? AND referred_doctor = ? ORDER BY upload_date ASC`,
+        [clinicId, doctor]
+      );
+      res.json(rows);
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: "Settlement fetch failed" });
+    }
+  }
+);
+/* =========================================
+   Doctor Referral PDF REPORT
+========================================= */
+const PDFDocument = require("pdfkit");
+router.get(
+"/doctor-settlement-pdf/:doctor/:from/:to",
+protect,
+authorize("admin"),
+async (req, res) => {
+    try {
+      const clinicId = req.user?.clinic_id ?? 1;
+      const { doctor, from, to } = req.params;
+
+      const [rows] = await db.query(
+        `SELECT upload_date, patient_name, scan_name, referral_amount
+         FROM patients
+         WHERE clinic_id = ? AND referred_doctor = ? AND DATE(upload_date) BETWEEN ? AND ?
+         ORDER BY upload_date ASC`,
+        [clinicId, doctor, from, to]
+      );
+
+      const doc = new PDFDocument({ margin: 50, size: "A4" });
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename=${doctor}-settlement.pdf`
+      );
+
+      doc.pipe(res);
+
+      const pageWidth = doc.page.width;
+      const pageHeight = doc.page.height;
+      const margin = 50;
+
+      /* ================= HEADER ================= */
+
+      doc.fontSize(20)
+        .font("Helvetica-Bold")
+        .text("SRIDEVI CT SCAN & DIAGNOSTIC CENTER", { align: "center" });
+
+      doc.fontSize(13)
+        .font("Helvetica")
+        .text("Doctor Settlement Report", { align: "center" });
+
+      doc.moveDown(0.5);
+
+            doc.moveDown(0.5);
+
+            doc.font("Helvetica-Bold")
+            .fontSize(14)
+            .text(`Doctor: ${doctor}`, margin, doc.y);
+        doc.font("Helvetica")
+        .fontSize(10)
+        .text(`From: ${from}   To: ${to}`);
+      doc.text(
+        `Generated On: ${dayjs().format("DD-MM-YYYY")}`,
+        { align: "right" }
+      );
+
+      doc.moveDown(2);
+
+      /* ================= TABLE ================= */
+
+      const startX = margin;
+      const rowHeight = 25;
+
+      const colWidths = [80, 80, 140, 110, 85];
+
+      const headers = [
+        "Date",
+        "Day",
+        "Patient",
+        "Scan",
+        "Referral"
+      ];
+
+      let y = doc.y;
+
+      const drawHeader = () => {
+        let x = startX;
+
+        doc.font("Helvetica-Bold").fontSize(10);
+
+        headers.forEach((header, i) => {
+          doc.rect(x, y, colWidths[i], rowHeight).stroke();
+
+          doc.text(header, x + 5, y + 8, {
+            width: colWidths[i] - 10,
+            lineBreak: false
+          });
+
+          x += colWidths[i];
+        });
+
+        y += rowHeight;
+      };
+
+      drawHeader();
+
+      /* ================= ROWS ================= */
+
+      let totalReferral = 0;
+
+      rows.forEach((row) => {
+
+        if (y + rowHeight > pageHeight - 150) {
+          doc.addPage();
+          y = margin;
+          drawHeader();
+        }
+
+        const date = dayjs(row.upload_date).format("DD-MM-YYYY");
+        const day = dayjs(row.upload_date).format("dddd");
+
+        const referral = Number(row.referral_amount) || 0;
+
+        totalReferral += referral;
+
+        const rowData = [
+          date,
+          day,
+          row.patient_name,
+          row.scan_name,
+          referral.toFixed(2)
+        ];
+
+        let x = startX;
+
+        doc.font("Helvetica").fontSize(10);
+
+        rowData.forEach((cell, i) => {
+
+          doc.rect(x, y, colWidths[i], rowHeight).stroke();
+
+          const alignRight = i === 4 ? "right" : "left";
+
+          doc.text(String(cell), x + 5, y + 8, {
+            width: colWidths[i] - 10,
+            align: alignRight,
+            lineBreak: false
+          });
+
+          x += colWidths[i];
+        });
+
+        y += rowHeight;
+      });
+
+      /* ================= TOTAL ================= */
+
+      if (y + 120 > pageHeight - margin) {
+        doc.addPage();
+        y = margin;
+      }
+
+      doc.moveDown(2);
+
+      const labelX = margin;
+      const valueX = pageWidth - margin - 120;
+
+      doc.font("Helvetica-Bold")
+        .fontSize(13)
+        .text("Total Referral Amount", labelX, doc.y, {
+          lineBreak: false
+        });
+
+      doc.font("Helvetica-Bold")
+        .fontSize(13)
+        .text(
+          `Rs. ${totalReferral.toFixed(2)}`,
+          valueX,
+          doc.y,
+          {
+            align: "right",
+            lineBreak: false
+          }
+        );
+
+      doc.moveDown(2);
+
+      /* ================= SIGNATURE ================= */
+
+      const [sigResult] = await db.query(
+        "SELECT file_path FROM clinic_signature ORDER BY id DESC LIMIT 1"
+      );
+
+      if (sigResult.length > 0 && sigResult[0].file_path) {
+        const signaturePath = sigResult[0].file_path;
+        const signatureFullPath = path.join(__dirname, "..", signaturePath);
+
+        // Signature scaling constraints
+        const maxWidth = 140;
+        const maxHeight = 75;
+        const minWidth = 80;
+
+        try {
+          if (!fs.existsSync(signatureFullPath)) {
+            throw new Error(`Signature file not found: ${signatureFullPath}`);
+          }
+
+          const image = doc.openImage(signatureFullPath);
+          const imgAspectRatio = image.width / image.height;
+
+          // Calculate scaled dimensions maintaining aspect ratio
+          let sigWidth = maxWidth;
+          let sigHeight = maxWidth / imgAspectRatio;
+
+          // If height exceeds max, scale down by height
+          if (sigHeight > maxHeight) {
+            sigHeight = maxHeight;
+            sigWidth = maxHeight * imgAspectRatio;
+          }
+
+          // Ensure minimum width
+          if (sigWidth < minWidth) {
+            sigWidth = minWidth;
+            sigHeight = minWidth / imgAspectRatio;
+          }
+
+          // Position signature at the right side without overlapping existing content.
+          const desiredY = doc.y + 8;
+          const bottomLimit = doc.page.height - margin - sigHeight - 10;
+          const sigY = Math.min(desiredY, bottomLimit);
+          const sigX = pageWidth - margin - sigWidth - 10;
+
+          doc.image(signatureFullPath, sigX, sigY, {
+            width: sigWidth,
+            height: sigHeight
+          });
+
+          doc.font("Helvetica-Bold")
+            .fontSize(10)
+            .text(
+              "Authorized Signature",
+              sigX - 20,
+              sigY + sigHeight + 5,
+              {
+                width: sigWidth + 40,
+                align: "center",
+                lineBreak: false
+              }
+            );
+        } catch (err) {
+          console.log("Signature error:", err);
+        }
+      }
+
+      doc.end();
+
+    } catch (error) {
+      console.error(error);
+      res.status(500).send("Error generating PDF");
+    }
+  }
+);
+/* =========================================
+   ADD DAILY EXPENSE
+========================================= */
+router.post("/add-expense", protect, authorize("admin"), (req, res) => {
+    const clinicId = req.user?.clinic_id ?? 1;
+    const { expense_date, description, amount } = req.body;
+
+    const sql = `INSERT INTO expenses (clinic_id, expense_date, description, amount) VALUES (?, ?, ?, ?)`;
+    db.query(sql, [clinicId, expense_date, description, amount], (err, result) => {
+        if (err) {
+            return res.status(500).json({ message: "Error adding expense" });
+        }
+
+        res.json({ message: "Expense added successfully" });
+    });
+});
+/* =========================================
+   DAILY REPORT SUMMARY (uses settlement window, not just a date)
+========================================= */
+router.get(
+  "/daily-report-summary/:date",
+  protect,
+  authorize("admin", "staff"),
+  async (req, res) => {
+    try {
+      const clinicId = req.user?.clinic_id ?? 1;
+      const { date } = req.params;
+      
+      // Get last settlement times
+      const [settlementRows] = await db.query(
+        `SELECT from_time, to_time FROM settlements WHERE clinic_id = ? ORDER BY to_time DESC LIMIT 1`,
+        [clinicId]
+      );
+      
+      let from, to;
+      
+      if (settlementRows[0]) {
+        // Use settlement window times
+        const st = settlementRows[0];
+        from = st.from_time instanceof Date ? st.from_time : new Date(st.from_time);
+        to = st.to_time instanceof Date ? st.to_time : new Date(st.to_time);
+      } else {
+        // Fallback: use date range for the day
+        const day = dayjs(date, "YYYY-MM-DD");
+        from = day.startOf("day");
+        to = from.add(1, "day");
+      }
+      
+      const fromStr = from instanceof Date ? from.toISOString().slice(0, 19).replace("T", " ") : from.format("YYYY-MM-DD HH:mm:ss");
+      const toStr = to instanceof Date ? to.toISOString().slice(0, 19).replace("T", " ") : to.format("YYYY-MM-DD HH:mm:ss");
+
+      let patientIncome;
+      try {
+        [patientIncome] = await db.query(
+          `SELECT IFNULL(SUM(CASE WHEN p.scan_category = 'CT' THEN p.amount - IFNULL(p.referral_amount, 0) ELSE 0 END), 0) AS ct_income,
+                  IFNULL(SUM(CASE WHEN p.scan_category = 'Ultrasound' THEN p.amount - IFNULL(p.referral_amount, 0) ELSE 0 END), 0) AS usg_income
+           FROM patients p
+           WHERE p.clinic_id = ? AND p.created_at >= ? AND p.created_at < ?`,
+          [clinicId, fromStr, toStr]
+        );
+      } catch (e) {
+        [patientIncome] = await db.query(
+          `SELECT IFNULL(SUM(CASE WHEN p.scan_category = 'CT' THEN p.amount - IFNULL(p.referral_amount, 0) ELSE 0 END), 0) AS ct_income,
+                  IFNULL(SUM(CASE WHEN p.scan_category = 'Ultrasound' THEN p.amount - IFNULL(p.referral_amount, 0) ELSE 0 END), 0) AS usg_income
+           FROM patients p
+           WHERE p.clinic_id = ? AND DATE(p.COALESCE(created_at, upload_date)) = ?`,
+          [clinicId, date]
+        );
+      }
+
+      let extraIncome;
+      try {
+        [extraIncome] = await db.query(
+          `SELECT IFNULL(SUM(CASE WHEN income_type = 'CT' THEN amount ELSE 0 END), 0) AS extra_ct,
+                  IFNULL(SUM(CASE WHEN income_type = 'USG' THEN amount ELSE 0 END), 0) AS extra_usg,
+                  IFNULL(SUM(CASE WHEN income_type = 'Other' THEN amount ELSE 0 END), 0) AS other_income,
+                  IFNULL(SUM(amount), 0) AS total_extra
+           FROM extra_income WHERE clinic_id = ? AND created_at >= ? AND created_at < ?`,
+          [clinicId, fromStr, toStr]
+        );
+      } catch (e) {
+        [extraIncome] = await db.query(
+          `SELECT IFNULL(SUM(CASE WHEN income_type = 'CT' THEN amount ELSE 0 END), 0) AS extra_ct,
+                  IFNULL(SUM(CASE WHEN income_type = 'USG' THEN amount ELSE 0 END), 0) AS extra_usg,
+                  IFNULL(SUM(CASE WHEN income_type = 'Other' THEN amount ELSE 0 END), 0) AS other_income,
+                  IFNULL(SUM(amount), 0) AS total_extra
+           FROM extra_income WHERE clinic_id = ? AND DATE(income_date) = ?`,
+          [clinicId, date]
+        );
+      }
+
+      let expenseRows;
+      try {
+        [expenseRows] = await db.query(
+          `SELECT IFNULL(SUM(amount), 0) AS total FROM expenses WHERE clinic_id = ? AND created_at >= ? AND created_at < ?`,
+          [clinicId, fromStr, toStr]
+        );
+      } catch (e) {
+        [expenseRows] = await db.query(
+          `SELECT IFNULL(SUM(amount), 0) AS total FROM expenses WHERE clinic_id = ? AND expense_date = ?`,
+          [clinicId, date]
+        );
+      }
+
+      const ct = Number(patientIncome[0]?.ct_income || 0) + Number(extraIncome[0]?.extra_ct || 0);
+      const usg = Number(patientIncome[0]?.usg_income || 0) + Number(extraIncome[0]?.extra_usg || 0);
+      const other = Number(extraIncome[0]?.other_income || 0);
+      const income = ct + usg + other;
+      const expenses = Number(expenseRows[0]?.total || 0);
+      const net = income - expenses;
+
+      res.json({
+        window: { from: fromStr, to: toStr },
+        ct,
+        usg,
+        other,
+        income,
+        expenses,
+        net
+      });
+    } catch (error) {
+      console.error("Daily report summary error:", error);
+      res.status(500).json({ message: "Error fetching daily report summary" });
+    }
+  }
+);
+
+/* =========================================
+   DAILY REPORT PDF (uses settlement window)
+========================================= */
+router.get("/daily-report-pdf/:date",protect, authorize("admin"), async (req, res) => {
+    try {
+        const clinicId = req.user?.clinic_id ?? 1;
+        const { date } = req.params;
+        
+        // Get last settlement window
+        const [settlementRows] = await db.query(
+          `SELECT from_time, to_time FROM settlements WHERE clinic_id = ? ORDER BY to_time DESC LIMIT 1`,
+          [clinicId]
+        );
+        
+        let from, to;
+        
+        if (settlementRows[0]) {
+          // Use settlement window
+          from = settlementRows[0].from_time instanceof Date ? 
+            settlementRows[0].from_time.toISOString().slice(0, 19).replace("T", " ") : 
+            String(settlementRows[0].from_time);
+          to = settlementRows[0].to_time instanceof Date ? 
+            settlementRows[0].to_time.toISOString().slice(0, 19).replace("T", " ") : 
+            String(settlementRows[0].to_time);
+        } else {
+          // Fallback: use day window
+          const dayWindow = getWindowForDate(date);
+          from = dayWindow.from;
+          to = dayWindow.to;
+        }
+
+        let results;
+        try {
+          const [rows] = await db.query(
+            `SELECT p.id, p.patient_name, p.scan_name, p.referred_doctor, p.amount, IFNULL(p.referral_amount, 0) AS referral_amount
+             FROM patients p
+             WHERE p.clinic_id = ? AND p.created_at >= ? AND p.created_at < ?
+             ORDER BY FIELD(p.scan_category, 'Ultrasound', 'CT'), p.id ASC`,
+            [clinicId, from, to]
+          );
+          results = rows;
+        } catch (e) {
+          const [rows] = await db.query(
+            `SELECT p.id, p.patient_name, p.scan_name, p.referred_doctor, p.amount, IFNULL(p.referral_amount, 0) AS referral_amount
+             FROM patients p WHERE p.clinic_id = ? AND DATE(COALESCE(p.created_at, p.upload_date)) = ?
+             ORDER BY FIELD(p.scan_category, 'Ultrasound', 'CT'), p.id ASC`,
+            [clinicId, date]
+          );
+          results = rows;
+        }
+
+        const PDFDocument = require("pdfkit");
+        const doc = new PDFDocument({ margin: 50, size: "A4" });
+
+        const buffers = [];
+        doc.on('data', buffers.push.bind(buffers));
+        doc.on('end', () => {
+            const pdfData = Buffer.concat(buffers);
+            res.setHeader("Content-Type", "application/pdf");
+            res.setHeader(
+                "Content-Disposition",
+                `attachment; filename=daily-report-${date}.pdf`
+            );
+            res.setHeader("Content-Length", pdfData.length);
+            res.send(pdfData);
+        });
+
+        const pageWidth = doc.page.width;
+        const pageHeight = doc.page.height;
+        const margin = 50;
+
+        /* HEADER */
+        doc.fontSize(20).font("Helvetica-Bold")
+            .text("SRIDEVI CT SCAN & DIAGNOSTIC CENTER", { align: "center" });
+
+        doc.fontSize(13).font("Helvetica")
+            .text("Daily Financial Report", { align: "center" });
+
+        doc.moveDown(0.5);
+        doc.fontSize(10).text(`Window: ${from}  to  ${to}`, { align: "right" });
+        doc.moveDown(2);
+
+        /* TABLE */
+        const startX = margin;
+        const rowHeight = 25;
+        const colWidths = [35, 105, 85, 105, 60, 50, 55];
+        const headers = ["S.No", "Patient", "Scan", "Doctor", "Total", "Ref", "Remain"];
+
+        let y = doc.y;
+
+        const drawHeader = () => {
+            let x = startX;
+            doc.font("Helvetica-Bold").fontSize(9);
+
+            headers.forEach((header, i) => {
+                doc.rect(x, y, colWidths[i], rowHeight).stroke();
+                doc.text(header, x + 5, y + 8, {
+                    width: colWidths[i] - 10,
+                    lineBreak: false
+                });
+                x += colWidths[i];
+            });
+
+            y += rowHeight;
+        };
+
+        drawHeader();
+
+        let totalRemaining = 0;
+        let serialNumber = 1;
+
+        results.forEach(row => {
+
+            if (y + rowHeight > pageHeight - 150) {
+                doc.addPage();
+                y = margin;
+                drawHeader();
+            }
+
+            const amount = Number(row.amount) || 0;
+            const referral = Number(row.referral_amount) || 0;
+            const remaining = amount - referral;
+
+            totalRemaining += remaining;
+
+            const rowData = [
+                serialNumber++,
+                row.patient_name,
+                row.scan_name,
+                row.referred_doctor || "-",
+                amount.toFixed(2),
+                referral.toFixed(2),
+                remaining.toFixed(2)
+            ];
+
+            let xPos = startX;
+            doc.font("Helvetica").fontSize(9);
+
+            rowData.forEach((cell, i) => {
+                doc.rect(xPos, y, colWidths[i], rowHeight).stroke();
+                const alignRight = i >= 5 ? "right" : "left";
+
+                doc.text(String(cell), xPos + 5, y + 8, {
+                    width: colWidths[i] - 10,
+                    align: alignRight,
+                    lineBreak: false
+                });
+
+                xPos += colWidths[i];
+            });
+
+            y += rowHeight;
+        });
+
+        /* EXPENSES */
+        let expenseRows;
+        try {
+          const [rows] = await db.query(
+              `SELECT expense_date, description, amount FROM expenses WHERE clinic_id = ? AND created_at >= ? AND created_at < ? ORDER BY expense_date ASC`,
+              [clinicId, from, to]
+          );
+          expenseRows = rows;
+        } catch (e) {
+          const [rows] = await db.query(
+              `SELECT expense_date, description, amount FROM expenses WHERE clinic_id = ? AND expense_date = ? ORDER BY expense_date ASC`,
+              [clinicId, date]
+          );
+          expenseRows = rows;
+        }
+
+        const totalExpense = expenseRows.reduce(
+            (sum, e) => sum + (Number(e.amount) || 0),
+            0
+        );
+
+        // Removed expenses table drawing
+
+        let extraRows;
+        try {
+          const [rows] = await db.query(
+              `SELECT income_date, income_type, description, amount FROM extra_income WHERE clinic_id = ? AND created_at >= ? AND created_at < ? ORDER BY income_date ASC`,
+              [clinicId, from, to]
+          );
+          extraRows = rows;
+        } catch (e) {
+          const [rows] = await db.query(
+              `SELECT income_date, income_type, description, amount FROM extra_income WHERE clinic_id = ? AND income_date = ? ORDER BY income_date ASC`,
+              [clinicId, date]
+          );
+          extraRows = rows;
+        }
+
+        const totalExtra = extraRows.reduce(
+            (sum, e) => sum + (Number(e.amount) || 0),
+            0
+        );
+
+        const totalAmount = totalRemaining;
+        const finalNet = totalAmount - totalExpense + totalExtra;
+
+        if (y + 220 > pageHeight - margin) {
+            doc.addPage();
+            y = margin;
+        }
+
+        /* FINANCIAL SUMMARY */
+
+doc.moveDown(2);
+
+doc.font("Helvetica-Bold")
+   .fontSize(14)
+   .text("Financial Summary", margin, doc.y);
+
+doc.moveDown(0.5);
+
+const labelX = margin;
+const valueX = pageWidth - margin - 120;
+
+const printRow = (label, value, bold = false) => {
+
+    doc.font(bold ? "Helvetica-Bold" : "Helvetica")
+       .fontSize(10);
+
+    doc.text(label, labelX, doc.y, { lineBreak: false });
+
+    doc.text(
+        `Rs. ${value.toFixed(2)}`,
+        valueX,
+        doc.y,
+        { align: "right", lineBreak: false }
+    );
+
+    doc.moveDown();
+};
+
+/* TOTAL AMOUNT */
+printRow("Total Amount", totalAmount);
+
+/* TOTAL EXPENSES */
+if (totalExpense > 0) {
+
+    printRow("Total Expenses", totalExpense, true);
+
+    expenseRows.forEach((ex) => {
+
+        const desc = ex.description || "-";
+        const amt = Number(ex.amount) || 0;
+
+        doc.font("Helvetica").fontSize(10);
+
+        doc.text(
+            `   - ${desc}`,
+            labelX,
+            doc.y,
+            { lineBreak: false }
+        );
+
+        doc.text(
+            `Rs. ${amt.toFixed(2)}`,
+            valueX,
+            doc.y,
+            { align: "right", lineBreak: false }
+        );
+
+        doc.moveDown();
+    });
+}
+
+/* EXTRA INCOME */
+if (totalExtra > 0) {
+
+    printRow("Extra Income", totalExtra, true);
+
+    extraRows.forEach((ex) => {
+
+        const desc = `${ex.income_type}: ${ex.description || "-"}`;
+        const amt = Number(ex.amount) || 0;
+
+        doc.font("Helvetica").fontSize(10);
+
+        doc.text(
+            `   - ${desc}`,
+            labelX,
+            doc.y,
+            { lineBreak: false }
+        );
+
+        doc.text(
+            `Rs. ${amt.toFixed(2)}`,
+            valueX,
+            doc.y,
+            { align: "right", lineBreak: false }
+        );
+
+        doc.moveDown();
+    });
+}
+
+doc.moveDown(0.5);
+
+doc.moveTo(labelX, doc.y)
+   .lineTo(pageWidth - margin, doc.y)
+   .stroke();
+
+        doc.moveTo(labelX, doc.y)
+            .lineTo(pageWidth - margin, doc.y)
+            .stroke();
+
+        doc.moveDown();
+
+            doc.font("Helvetica-Bold")
+            .fontSize(15)   // Increased size
+            .text("FINAL NET COLLECTION", labelX, doc.y, { lineBreak: false });
+
+            doc.font("Helvetica-Bold")
+            .fontSize(18)
+            .text(
+                `Rs. ${finalNet.toFixed(2)}`,
+                valueX,
+                doc.y,
+                { align: "right", lineBreak: false }
+            );
+
+            doc.moveDown(0.5);
+
+                    /* SIGNATURE */
+
+            const [sigResult] = await db.query(
+                "SELECT file_path FROM clinic_signature ORDER BY id DESC LIMIT 1"
+            );
+
+            if (sigResult.length > 0 && sigResult[0].file_path) {
+
+                const signaturePath = sigResult[0].file_path;
+
+                try {
+                    // Signature scaling constraints
+                    const maxWidth = 140;
+                    const maxHeight = 75;
+                    const minWidth = 80;
+
+                    const image = doc.openImage(signaturePath);
+                    const imgAspectRatio = image.width / image.height;
+
+                    // Calculate scaled dimensions maintaining aspect ratio
+                    let sigWidth = maxWidth;
+                    let sigHeight = maxWidth / imgAspectRatio;
+
+                    // If height exceeds max, scale down by height
+                    if (sigHeight > maxHeight) {
+                      sigHeight = maxHeight;
+                      sigWidth = maxHeight * imgAspectRatio;
+                    }
+
+                    // Ensure minimum width
+                    if (sigWidth < minWidth) {
+                      sigWidth = minWidth;
+                      sigHeight = minWidth / imgAspectRatio;
+                    }
+
+                    // Center signature horizontally
+                    const sigX = pageWidth - margin - sigWidth - 10;
+                    const sigY = doc.y + 8;
+
+                    doc.image(signaturePath, sigX, sigY, {
+                        width: sigWidth,
+                        height: sigHeight
+                    });
+
+                    doc.font("Helvetica-Bold")
+                        .fontSize(10)
+                        .text(
+                            "Authorized Signature",
+                            sigX - 20,
+                            sigY + sigHeight + 8,
+                            {
+                                width: sigWidth + 40,
+                                align: "center",
+                                lineBreak: false
+                            }
+                        );
+                } catch (imgError) {
+                    console.error("Error loading signature image:", imgError);
+                    // Skip signature if image fails
+                }
+            }
+
+                    doc.end();
+
+                } catch (error) {
+                    console.error(error);
+                    res.status(500).send("Error generating PDF");
+                }
+            });
+
+/* =========================================
+   DASHBOARD SUMMARY
+   (for dashboard cards - filters by last settlement time)
+========================================= */
+router.get("/dashboard-summary", protect, authorize("admin"), async (req, res) => {
+  try {
+    const clinicId = req.user?.clinic_id ?? 1;
+    
+    // Get today's data
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    
+    const [todayPatients] = await db.query(
+      `SELECT
+        IFNULL(SUM(CASE WHEN scan_category = 'Ultrasound' THEN amount - IFNULL(referral_amount, 0) END), 0) AS ultrasound_income,
+        IFNULL(SUM(CASE WHEN scan_category = 'CT' THEN amount - IFNULL(referral_amount, 0) END), 0) AS ct_income
+      FROM patients 
+      WHERE clinic_id = ? AND DATE(COALESCE(created_at, upload_date)) = ?`,
+      [clinicId, today]
+    );
+
+    const [todayExtra] = await db.query(
+      `SELECT IFNULL(SUM(CASE WHEN income_type = 'USG' THEN amount ELSE 0 END), 0) AS extra_usg,
+              IFNULL(SUM(CASE WHEN income_type = 'CT' THEN amount ELSE 0 END), 0) AS extra_ct,
+              IFNULL(SUM(CASE WHEN income_type = 'Other' THEN amount ELSE 0 END), 0) AS extra_other
+       FROM extra_income 
+       WHERE clinic_id = ? AND DATE(COALESCE(created_at, income_date)) = ?`,
+      [clinicId, today]
+    );
+
+    const [todayExpenses] = await db.query(
+      `SELECT IFNULL(SUM(amount), 0) AS total_expense 
+       FROM expenses 
+       WHERE clinic_id = ? AND DATE(COALESCE(created_at, expense_date)) = ?`,
+      [clinicId, today]
+    );
+
+    // Get all-time totals for income and expenses
+    const [allTimePatients] = await db.query(
+      `SELECT
+        IFNULL(SUM(CASE WHEN scan_category = 'Ultrasound' THEN amount - IFNULL(referral_amount, 0) END), 0) AS ultrasound_income,
+        IFNULL(SUM(CASE WHEN scan_category = 'CT' THEN amount - IFNULL(referral_amount, 0) END), 0) AS ct_income
+      FROM patients WHERE clinic_id = ?`,
+      [clinicId]
+    );
+
+    const [allTimeExtra] = await db.query(
+      `SELECT IFNULL(SUM(CASE WHEN income_type = 'USG' THEN amount ELSE 0 END), 0) AS extra_usg,
+              IFNULL(SUM(CASE WHEN income_type = 'CT' THEN amount ELSE 0 END), 0) AS extra_ct,
+              IFNULL(SUM(CASE WHEN income_type = 'Other' THEN amount ELSE 0 END), 0) AS extra_other
+       FROM extra_income WHERE clinic_id = ?`,
+      [clinicId]
+    );
+
+    const [allTimeExpenses] = await db.query(
+      `SELECT IFNULL(SUM(amount), 0) AS total_expense FROM expenses WHERE clinic_id = ?`,
+      [clinicId]
+    );
+
+    // Get total settled amount - ONLY FOR TOTAL COUNTER CALCULATION
+    const [settlementTotal] = await db.query(
+      `SELECT IFNULL(SUM(amount), 0) AS total_settled FROM settlements WHERE clinic_id = ?`,
+      [clinicId]
+    );
+
+    // Today's calculations
+    const todayUltrasoundIncome = Number(todayPatients[0].ultrasound_income || 0) + Number(todayExtra[0].extra_usg || 0);
+    const todayCTIncome = Number(todayPatients[0].ct_income || 0) + Number(todayExtra[0].extra_ct || 0);
+    const todayExpense = Number(todayExpenses[0].total_expense || 0);
+    const todayNet = todayUltrasoundIncome + todayCTIncome - todayExpense;
+
+    // All-time calculations
+    const totalUltrasound = Number(allTimePatients[0].ultrasound_income || 0) + Number(allTimeExtra[0].extra_usg || 0);
+    const totalCT = Number(allTimePatients[0].ct_income || 0) + Number(allTimeExtra[0].extra_ct || 0);
+    const totalExpense = Number(allTimeExpenses[0].total_expense || 0);
+    const totalOther = Number(allTimeExtra[0].extra_other || 0);
+    const totalSettled = Number(settlementTotal[0].total_settled || 0);
+
+    const overallIncome = totalUltrasound + totalCT + totalOther;
+    const overallNet = overallIncome - totalExpense;
+    
+    // Get referral balance
+    const [referralBalanceRows] = await db.query(
+      `SELECT IFNULL(SUM(referral_amount), 0) AS referral_balance FROM patients 
+       WHERE clinic_id = ? AND (referral_status <> 'Paid' OR referral_status IS NULL)`,
+      [clinicId]
+    );
+    const referralBalance = Number(referralBalanceRows[0].referral_balance || 0);
+    
+    // UPDATED: Total Counter = (All-time Income - All-time Expenses) - Total Settled - Referral Balance
+    const totalCounter = Math.max(0, overallNet - totalSettled + referralBalance);
+
+    res.json({
+      /* Today's data */
+      todayUltrasoundIncome,
+      todayCTIncome,
+      todayExpense,
+      todayNet,
+      
+      /* All-time totals */
+      totalUltrasound,
+      totalCT,
+      overallNet,
+      
+      /* Total Counter (Updated: all-time income/expenses - settled) */
+      totalCounter,
+      
+      /* Balance */
+      referralBalance
+    });
+  } catch (error) {
+    console.error("Dashboard error:", error);
+    res.status(500).json({
+      message: "Dashboard summary error",
+      error: error.message
+    });
+  }
+});
+/* =========================================
+   UPLOAD SIGNATURE
+========================================= */
+router.post("/upload-signature", protect, authorize("admin"), uploadSignature.single("signature"), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
+
+    const clinicId = req.user?.clinic_id ?? 1;
+    const filePath = `uploads/signature/${req.file.filename}`;
+
+    await db.query(
+      "INSERT INTO clinic_signature (clinic_id, file_path) VALUES (?, ?)",
+      [clinicId, filePath]
+    );
+
+    res.json({
+      message: "Signature uploaded successfully",
+      filePath
+    });
+  } catch (error) {
+    console.error("Upload signature error:", error);
+    res.status(500).json({ message: "Failed to upload signature" });
+  }
+});
+
+/* =========================================
+   GET CURRENT SIGNATURE
+========================================= */
+router.get("/current-signature", protect, authorize("admin"), async (req, res) => {
+  try {
+    const clinicId = req.user?.clinic_id ?? 1;
+    const [rows] = await db.query(
+      "SELECT file_path FROM clinic_signature WHERE clinic_id = ? ORDER BY id DESC LIMIT 1",
+      [clinicId]
+    );
+
+    if (rows.length > 0) {
+      // Normalize path separators for web URLs
+      const normalizedPath = rows[0].file_path.replace(/\\/g, '/');
+      res.json({ filePath: normalizedPath });
+    } else {
+      res.json({ filePath: null });
+    }
+  } catch (error) {
+    console.error("Get current signature error:", error);
+    res.status(500).json({ message: "Failed to get current signature" });
+  }
+});
+
+/* =========================================
+   GET SIGNATURE IMAGE
+========================================= */
+router.get("/signature-image", protect, authorize("admin"), async (req, res) => {
+  try {
+    const clinicId = req.user?.clinic_id ?? 1;
+    const [rows] = await db.query(
+      "SELECT file_path FROM clinic_signature WHERE clinic_id = ? ORDER BY id DESC LIMIT 1",
+      [clinicId]
+    );
+
+    if (rows.length > 0) {
+      const filePath = rows[0].file_path;
+      const fullPath = path.join(__dirname, "..", filePath);
+
+      // Check if file exists
+      if (fs.existsSync(fullPath)) {
+        // Set proper headers
+        res.type("image/*");
+        res.header("Cache-Control", "public, max-age=3600");
+        res.sendFile(fullPath);
+      } else {
+        res.status(404).json({ message: "Signature file not found" });
+      }
+    } else {
+      res.status(404).json({ message: "No signature uploaded" });
+    }
+  } catch (error) {
+    console.error("Get signature image error:", error);
+    res.status(500).json({ message: "Failed to get signature image" });
+  }
+});
+
+/* =========================================
+   GET ALL SIGNATURES
+========================================= */
+router.get("/signatures", protect, authorize("admin"), async (req, res) => {
+  try {
+    const clinicId = req.user?.clinic_id ?? 1;
+    const [rows] = await db.query(
+      "SELECT id, file_path FROM clinic_signature WHERE clinic_id = ? ORDER BY id DESC",
+      [clinicId]
+    );
+    res.json({ signatures: rows });
+  } catch (error) {
+    console.error("Get signatures error:", error);
+    res.status(500).json({ message: "Failed to get signatures" });
+  }
+});
+
+/* =========================================
+   GET SIGNATURE BY ID
+========================================= */
+router.get("/signature/:id", protect, authorize("admin"), async (req, res) => {
+  try {
+    const clinicId = req.user?.clinic_id ?? 1;
+    const [rows] = await db.query(
+      "SELECT file_path FROM clinic_signature WHERE id = ? AND clinic_id = ?",
+      [req.params.id, clinicId]
+    );
+
+    if (rows.length > 0) {
+      const filePath = rows[0].file_path;
+      const fullPath = path.join(__dirname, "..", filePath);
+
+      if (fs.existsSync(fullPath)) {
+        res.type("image/*");
+        res.header("Cache-Control", "no-cache");
+        res.sendFile(fullPath);
+      } else {
+        res.status(404).json({ message: "Signature file not found" });
+      }
+    } else {
+      res.status(404).json({ message: "Signature not found" });
+    }
+  } catch (error) {
+    console.error("Get signature by id error:", error);
+    res.status(500).json({ message: "Failed to get signature" });
+  }
+});
+
+/* =========================================
+   SET CURRENT SIGNATURE
+========================================= */
+router.post("/signature/:id/set-current", protect, authorize("admin"), async (req, res) => {
+  try {
+    const clinicId = req.user?.clinic_id ?? 1;
+    const [rows] = await db.query(
+      "SELECT file_path FROM clinic_signature WHERE id = ? AND clinic_id = ?",
+      [req.params.id, clinicId]
+    );
+
+    if (rows.length > 0) {
+      res.json({ message: "Signature selected", filePath: rows[0].file_path });
+    } else {
+      res.status(404).json({ message: "Signature not found" });
+    }
+  } catch (error) {
+    console.error("Set current signature error:", error);
+    res.status(500).json({ message: "Failed to set signature" });
+  }
+});
+
+/* =========================================
+   DELETE SIGNATURE
+========================================= */
+router.delete("/signature/:id", protect, authorize("admin"), async (req, res) => {
+  try {
+    const clinicId = req.user?.clinic_id ?? 1;
+    const [rows] = await db.query(
+      "SELECT file_path FROM clinic_signature WHERE id = ? AND clinic_id = ?",
+      [req.params.id, clinicId]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ message: "Signature not found" });
+    }
+
+    const filePath = rows[0].file_path;
+    const fullPath = path.join(__dirname, "..", filePath);
+
+    // Delete file from disk if it exists
+    if (fs.existsSync(fullPath)) {
+      fs.unlinkSync(fullPath);
+    }
+
+    // Delete from database
+    await db.query("DELETE FROM clinic_signature WHERE id = ?", [req.params.id]);
+
+    res.json({ message: "Signature deleted successfully" });
+  } catch (error) {
+    console.error("Delete signature error:", error);
+    res.status(500).json({ message: "Failed to delete signature" });
+  }
+});
+
+/* =========================================
+   GENERATE INVOICE PDF
+========================================= */
+router.get("/invoice/pdf/:id", protect, authorize("admin", "staff"), async (req, res) => {
+  try {
+    const clinicId = req.user?.clinic_id ?? 1;
+    const [rows] = await db.query(
+      "SELECT * FROM patients WHERE id = ? AND clinic_id = ?",
+      [req.params.id, clinicId]
+    );
+    if (!rows.length) return res.status(404).json({ message: "Patient not found" });
+
+    const data = rows[0];
+
+    const PDFDocument = require("pdfkit");
+    const dayjs = require("dayjs");
+
+    const doc = new PDFDocument({ size: "A4", margin: 50 });
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=invoice-${data.id}.pdf`
+    );
+
+    doc.pipe(res);
+
+    const pageWidth = doc.page.width;
+    const margin = 50;
+    const rightX = pageWidth - margin;
+
+    const invoiceNo = String(data.id).padStart(6, "0");
+
+    // ===== CLEAN AMOUNT (SAME AS REPORT STYLE) =====
+    const amount = Number(
+      String(data.amount).replace(/[^\d.]/g, "")
+    ) || 0;
+
+    const formattedAmount = amount.toFixed(2);
+
+    // ================= HEADER =================
+    doc.font("Helvetica-Bold").fontSize(18);
+    doc.text("SRIDEVI DIAGNOSTIC CENTER", margin, 50);
+
+    doc.font("Helvetica").fontSize(11);
+    doc.text("Mahendranath Complex, Bus Stand Back Side, Nagarkurnool", margin, 75);
+    doc.text("Phone: 8977419348, 8977449348", margin, 90);
+
+    // ================= INVOICE INFO =================
+    doc.font("Helvetica-Bold").fontSize(13);
+    doc.text("INVOICE", rightX - 100, 50, { width: 100, align: "right" });
+
+    doc.font("Helvetica").fontSize(11);
+    doc.text(`Invoice No: ${invoiceNo}`, rightX - 150, 75, { width: 150, align: "right" });
+    doc.text(
+      `Date: ${dayjs(data.upload_date).format("DD/MM/YYYY")}`,
+      rightX - 150,
+      90,
+      { width: 150, align: "right" }
+    );
+
+    // LINE
+    doc.moveTo(margin, 120).lineTo(rightX, 120).stroke();
+
+    // ================= PATIENT DETAILS =================
+    const infoY = 140;
+
+    doc.font("Helvetica-Bold").fontSize(13);
+
+    doc.text(`Patient Name: ${data.patient_name}`, margin, infoY);
+    doc.text(`Age: ${data.age}`, margin, infoY + 25);
+    doc.text(`Gender: ${data.gender}`, margin, infoY + 50);
+
+    // ================= TABLE =================
+    const tableTop = 240;
+
+    const col1 = margin;
+    const col2 = 220;
+    const col3 = rightX - 60;
+
+    doc.font("Helvetica-Bold").fontSize(12);
+
+    doc.text("Date", col1, tableTop);
+    doc.text("Scan", col2, tableTop);
+    doc.text("Amount", col3, tableTop, { width: 60, align: "center" });
+
+    doc.moveTo(margin, tableTop + 18).lineTo(rightX, tableTop + 18).stroke();
+
+    // ROW
+    const rowY = tableTop + 30;
+
+    doc.font("Helvetica").fontSize(12);
+
+    doc.text(dayjs(data.upload_date).format("DD-MM-YYYY"), col1, rowY);
+    doc.text(data.scan_name || "-", col2, rowY);
+
+    doc.text(
+  `Rs. ${formattedAmount}`,
+  col3,
+  rowY,
+  {
+    width: 100,        // ✅ increase width
+    align: "left",
+    lineBreak: false   // ✅ force single line
+  }
+);
+
+    doc.moveTo(margin, rowY + 25).lineTo(rightX, rowY + 25).stroke();
+
+    // ================= TOTAL =================
+    const totalY = rowY + 50;
+
+    doc.font("Helvetica-Bold").fontSize(14);
+
+        // Combine in ONE text call (KEY FIX)
+        doc.text(
+          `Total Amount: Rs. ${formattedAmount}`,
+          col2,
+          totalY,
+          {
+            width: rightX - col2,
+            align: "right",
+            lineBreak: false
+          }
+        );
+    // ================= THANK YOU =================
+    doc.font("Helvetica-Bold").fontSize(12);
+
+    doc.text("Thank you for visiting", 0, totalY + 50, {
+      align: "center"
+    });
+
+    // ================= SIGNATURE (COPIED FROM YOUR REPORT) =================
+    const [sigResult] = await db.query(
+      "SELECT file_path FROM clinic_signature ORDER BY id DESC LIMIT 1"
+    );
+
+    if (sigResult.length > 0 && sigResult[0].file_path) {
+      const signaturePath = sigResult[0].file_path;
+      const signatureFullPath = path.join(__dirname, "..", signaturePath);
+
+      try {
+        if (!fs.existsSync(signatureFullPath)) {
+          throw new Error(`Signature file not found: ${signatureFullPath}`);
+        }
+
+        // Keep the signature within a bounding box & maintain aspect ratio.
+        const maxWidth = 140;
+        const maxHeight = 75;
+        const minWidth = 80;
+
+        const image = doc.openImage(signatureFullPath);
+        const ratio = image.width / image.height;
+
+        let sigWidth = maxWidth;
+        let sigHeight = maxWidth / ratio;
+
+        if (sigHeight > maxHeight) {
+          sigHeight = maxHeight;
+          sigWidth = maxHeight * ratio;
+        }
+
+        if (sigWidth < minWidth) {
+          sigWidth = minWidth;
+          sigHeight = minWidth / ratio;
+        }
+
+        // Position signature at the right side without overlapping existing content.
+        const desiredY = doc.y + 20;
+        const bottomLimit = doc.page.height - margin - sigHeight - 10;
+        const sigY = Math.min(desiredY, bottomLimit);
+        const sigX = pageWidth - margin - sigWidth - 10;
+
+        doc.image(signatureFullPath, sigX, sigY, {
+          width: sigWidth,
+          height: sigHeight
+        });
+
+        doc.font("Helvetica-Bold")
+          .fontSize(10)
+          .text(
+            "Authorized Signature",
+            sigX - 20,
+            sigY + sigHeight + 8,
+            {
+              width: sigWidth + 40,
+              align: "center"
+            }
+          );
+      } catch (err) {
+        console.log("Signature error:", err);
+      }
+    }
+
+    doc.end();
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to generate invoice" });
+  }
+});                          
+
+/* =========================================
+   PUBLIC INVOICE PDF (No Login)
+========================================= */
+router.get("/invoice/public/:id", async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      "SELECT * FROM patients WHERE id = ?",
+      [req.params.id]
+    );
+
+    if (!rows.length) {
+      return res.status(404).json({ message: "Patient not found" });
+    }
+
+    const data = rows[0];
+
+    const PDFDocument = require("pdfkit");
+    const dayjs = require("dayjs");
+
+    const doc = new PDFDocument({ size: "A4", margin: 50 });
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=invoice-${data.id}.pdf`
+    );
+
+    doc.pipe(res);
+
+    const pageWidth = doc.page.width;
+    const margin = 50;
+    const rightX = pageWidth - margin;
+
+    const invoiceNo = String(data.id).padStart(6, "0");
+
+    const amount = Number(
+      String(data.amount).replace(/[^\d.]/g, "")
+    ) || 0;
+
+    const formattedAmount = amount.toFixed(2);
+
+    doc.font("Helvetica-Bold").fontSize(18);
+    doc.text("SRIDEVI DIAGNOSTIC CENTER", margin, 50);
+
+    doc.font("Helvetica").fontSize(11);
+    doc.text("Mahendranath Complex, Bus Stand Back Side, Nagarkurnool", margin, 75);
+    doc.text("Phone: 8977419348, 8977449348", margin, 90);
+
+    doc.font("Helvetica-Bold").fontSize(13);
+    doc.text("INVOICE", rightX - 100, 50, { width: 100, align: "right" });
+
+    doc.font("Helvetica").fontSize(11);
+    doc.text(`Invoice No: ${invoiceNo}`, rightX - 150, 75, { width: 150, align: "right" });
+    doc.text(
+      `Date: ${dayjs(data.upload_date).format("DD/MM/YYYY")}`,
+      rightX - 150,
+      90,
+      { width: 150, align: "right" }
+    );
+
+    doc.moveTo(margin, 120).lineTo(rightX, 120).stroke();
+
+    const infoY = 140;
+    doc.font("Helvetica-Bold").fontSize(13);
+    doc.text(`Patient Name: ${data.patient_name}`, margin, infoY);
+    doc.text(`Age: ${data.age}`, margin, infoY + 25);
+    doc.text(`Gender: ${data.gender}`, margin, infoY + 50);
+
+    const tableTop = 240;
+    const col1 = margin;
+    const col2 = 220;
+    const col3 = rightX - 60;
+
+    doc.font("Helvetica-Bold").fontSize(12);
+    doc.text("Date", col1, tableTop);
+    doc.text("Scan", col2, tableTop);
+    doc.text("Amount", col3, tableTop, { width: 60, align: "center" });
+
+    doc.moveTo(margin, tableTop + 18).lineTo(rightX, tableTop + 18).stroke();
+
+    const rowY = tableTop + 30;
+    doc.font("Helvetica").fontSize(12);
+    doc.text(dayjs(data.upload_date).format("DD-MM-YYYY"), col1, rowY);
+    doc.text(data.scan_name || "-", col2, rowY);
+    doc.text(`Rs. ${formattedAmount}`, col3, rowY, { width: 100, align: "left", lineBreak: false });
+
+    doc.moveTo(margin, rowY + 25).lineTo(rightX, rowY + 25).stroke();
+
+    const totalY = rowY + 50;
+    doc.font("Helvetica-Bold").fontSize(14);
+    doc.text(`Total Amount: Rs. ${formattedAmount}`, col2, totalY, {
+      width: rightX - col2,
+      align: "right",
+      lineBreak: false
+    });
+
+    doc.font("Helvetica-Bold").fontSize(12);
+    doc.text("Thank you for visiting", 0, totalY + 50, { align: "center" });
+
+    // ================= SIGNATURE =================
+    const [sigResult] = await db.query(
+      "SELECT file_path FROM clinic_signature ORDER BY id DESC LIMIT 1"
+    );
+
+    if (sigResult.length > 0 && sigResult[0].file_path) {
+      const signaturePath = sigResult[0].file_path;
+      const signatureFullPath = path.join(__dirname, "..", signaturePath);
+
+      try {
+        if (!fs.existsSync(signatureFullPath)) {
+          throw new Error(`Signature file not found: ${signatureFullPath}`);
+        }
+
+        // Keep the signature within a bounding box & maintain aspect ratio.
+        const maxWidth = 140;
+        const maxHeight = 75;
+        const minWidth = 80;
+
+        const image = doc.openImage(signatureFullPath);
+        const ratio = image.width / image.height;
+
+        let sigWidth = maxWidth;
+        let sigHeight = maxWidth / ratio;
+
+        if (sigHeight > maxHeight) {
+          sigHeight = maxHeight;
+          sigWidth = maxHeight * ratio;
+        }
+
+        if (sigWidth < minWidth) {
+          sigWidth = minWidth;
+          sigHeight = minWidth / ratio;
+        }
+
+        const desiredY = doc.y + 20;
+        const bottomLimit = doc.page.height - margin - sigHeight - 10;
+        const sigY = Math.min(desiredY, bottomLimit);
+        const sigX = pageWidth - margin - sigWidth - 10;
+
+        doc.image(signatureFullPath, sigX, sigY, {
+          width: sigWidth,
+          height: sigHeight
+        });
+
+        doc.font("Helvetica-Bold")
+          .fontSize(10)
+          .text(
+            "Authorized Signature",
+            sigX - 20,
+            sigY + sigHeight + 8,
+            {
+              width: sigWidth + 40,
+              align: "center"
+            }
+          );
+      } catch (err) {
+        console.log("Signature error:", err);
+      }
+    }
+
+    doc.end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to generate invoice" });
+  }
+});
+
+module.exports = router;

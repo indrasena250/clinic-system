@@ -1,0 +1,5 @@
+-- Assign users to clinics
+-- Run this after multi-clinic setup to assign existing users to Clinic 1 or Clinic 2
+-- UPDATE users SET clinic_id = 1 WHERE id = 1;  -- User 1 -> Clinic 1
+-- UPDATE users SET clinic_id = 2 WHERE id = 2;  -- User 2 -> Clinic 2
+-- Or assign all to Clinic 1: UPDATE users SET clinic_id = 1;

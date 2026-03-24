@@ -1,0 +1,72 @@
+export const scanPrices = {
+  // USG scans
+  "USG Abdomen": 800,
+  "USG KUB": 800,
+  "USG Swelling": 800,
+  "Early Pregnancy Scan": 800,
+  "Growth Scan /ANC": 800,
+  "USG Breast": 900,
+  "USG Neck": 900,
+  "USG Scrotum": 900,
+  "Neurosonography": 900,
+  "Follicular Study": 1000,
+  "NT Scan": 1200,
+  "USG Shoulder": 1200,
+  "USG Knee": 1200,
+  "Growth doppler": 1500,
+  "Venous Doppler": 1500,
+  "TIFFA Scan": 1800,
+  "Arterial and Venous Doppler": 2500,
+  "FNAC": 3000,
+  // CT scans
+  "CT BRAIN": 2500,
+  "CT ORBIT": 4500,
+  "CT PNS": 4500,
+  "CT TEMPORAL BONES": 4500,
+  "CT 3D FACIAL": 4500,
+  "CT UPPER/LOWER LIMBS": 4500,
+  "CT NECK": 5000,
+  "CT SHOULDER": 5000,
+  "CT CHEST/HRCT": 5000,
+  "CT ABDOMEN": 5000,
+  "CT KUB": 5000,
+  "CT PELVIS": 5000,
+  "CT SPINE (CS,DS,LS)": 5000
+};
+
+export const usgScans = [
+  "USG Abdomen",
+  "USG KUB",
+  "USG Swelling",
+  "Early Pregnancy Scan",
+  "Growth Scan /ANC",
+  "USG Breast",
+  "USG Neck",
+  "USG Scrotum",
+  "Neurosonography",
+  "Follicular Study",
+  "NT Scan",
+  "USG Shoulder",
+  "USG Knee",
+  "Growth doppler",
+  "Venous Doppler",
+  "TIFFA Scan",
+  "Arterial and Venous Doppler",
+  "FNAC"
+];
+
+export const ctScans = [
+  "CT BRAIN",
+  "CT ORBIT",
+  "CT PNS",
+  "CT TEMPORAL BONES",
+  "CT 3D FACIAL",
+  "CT UPPER/LOWER LIMBS",
+  "CT NECK",
+  "CT SHOULDER",
+  "CT CHEST/HRCT",
+  "CT ABDOMEN",
+  "CT KUB",
+  "CT PELVIS",
+  "CT SPINE (CS,DS,LS)"
+];
