@@ -14,8 +14,6 @@ const app = express();
 
 app.use(helmet());
 
-const cors = require("cors");
-
 const allowedOrigins = [
   "http://localhost:5173",
   "https://clinic-system-tau.vercel.app"
