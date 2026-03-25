@@ -6,29 +6,20 @@ const db = require("../config/db");
 const pool = require("../config/db");
 const dayjs = require("dayjs");
 const multer = require("multer");
-const path = require("path");
-const fs = require("fs");
+const { CloudinaryStorage } = require("multer-storage-cloudinary");
+const cloudinary = require("../config/cloudinary");
 
-// Ensure signature directory exists
-const signatureDir = path.join(__dirname, "../uploads/signature");
-if (!fs.existsSync(signatureDir)) {
-  fs.mkdirSync(signatureDir, { recursive: true });
-}
-
-// Multer storage for signature
-const signatureStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, signatureDir);
+const signatureStorage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: "clinic-signatures",
+    allowed_formats: ["jpg", "png", "jpeg"],
   },
-  filename: (req, file, cb) => {
-    const uniqueName = `signature-${Date.now()}${path.extname(file.originalname)}`;
-    cb(null, uniqueName);
-  }
 });
 
 const uploadSignature = multer({
   storage: signatureStorage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
   fileFilter: (req, file, cb) => {
     if (file.mimetype.startsWith("image/")) {
       cb(null, true);
@@ -54,6 +45,52 @@ function getWindowForDate(date) {
     from: from.format("YYYY-MM-DD HH:mm:ss"),
     to: to.format("YYYY-MM-DD HH:mm:ss")
   };
+}
+
+async function drawSignature(doc, pageWidth, margin) {
+  try {
+    const [sigResult] = await db.query(
+      "SELECT file_path FROM clinic_signature ORDER BY id DESC LIMIT 1"
+    );
+    if (!sigResult?.length || !sigResult[0].file_path) return;
+
+    const signatureUrl = sigResult[0].file_path;
+    const https = require('https');
+    const signatureBuffer = await new Promise((resolve, reject) => {
+      https.get(signatureUrl, (res) => {
+        const chunks = [];
+        res.on('data', (chunk) => chunks.push(chunk));
+        res.on('end', () => resolve(Buffer.concat(chunks)));
+        res.on('error', (err) => reject(err));
+      });
+    });
+
+    const sigWidth = 180;
+    const sigHeight = 90;
+    const sigX = pageWidth - margin - sigWidth - 10;
+    const sigY = doc.y + 10;
+
+    doc.image(signatureBuffer, sigX, sigY, {
+      fit: [sigWidth, sigHeight],
+      align: 'right'
+    });
+
+    doc.font("Helvetica-Bold")
+      .fontSize(10)
+      .text(
+        "Authorized Signature",
+        sigX,
+        sigY + sigHeight + 8,
+        {
+          width: sigWidth,
+          align: "center"
+        }
+      );
+
+    doc.moveDown(1);
+  } catch (error) {
+    console.error("Error drawing signature:", error);
+  }
 }
 
 /* =========================================
@@ -646,73 +683,7 @@ async (req, res) => {
 
       doc.moveDown(2);
 
-      /* ================= SIGNATURE ================= */
-
-      const [sigResult] = await db.query(
-        "SELECT file_path FROM clinic_signature ORDER BY id DESC LIMIT 1"
-      );
-
-      if (sigResult.length > 0 && sigResult[0].file_path) {
-        const signaturePath = sigResult[0].file_path;
-        const signatureFullPath = path.join(__dirname, "..", signaturePath);
-
-        // Signature scaling constraints
-        const maxWidth = 140;
-        const maxHeight = 75;
-        const minWidth = 80;
-
-        try {
-          if (!fs.existsSync(signatureFullPath)) {
-            throw new Error(`Signature file not found: ${signatureFullPath}`);
-          }
-
-          const image = doc.openImage(signatureFullPath);
-          const imgAspectRatio = image.width / image.height;
-
-          // Calculate scaled dimensions maintaining aspect ratio
-          let sigWidth = maxWidth;
-          let sigHeight = maxWidth / imgAspectRatio;
-
-          // If height exceeds max, scale down by height
-          if (sigHeight > maxHeight) {
-            sigHeight = maxHeight;
-            sigWidth = maxHeight * imgAspectRatio;
-          }
-
-          // Ensure minimum width
-          if (sigWidth < minWidth) {
-            sigWidth = minWidth;
-            sigHeight = minWidth / imgAspectRatio;
-          }
-
-          // Position signature at the right side without overlapping existing content.
-          const desiredY = doc.y + 8;
-          const bottomLimit = doc.page.height - margin - sigHeight - 10;
-          const sigY = Math.min(desiredY, bottomLimit);
-          const sigX = pageWidth - margin - sigWidth - 10;
-
-          doc.image(signatureFullPath, sigX, sigY, {
-            width: sigWidth,
-            height: sigHeight
-          });
-
-          doc.font("Helvetica-Bold")
-            .fontSize(10)
-            .text(
-              "Authorized Signature",
-              sigX - 20,
-              sigY + sigHeight + 5,
-              {
-                width: sigWidth + 40,
-                align: "center",
-                lineBreak: false
-              }
-            );
-        } catch (err) {
-          console.log("Signature error:", err);
-        }
-      }
-
+      await drawSignature(doc, pageWidth, margin);
       doc.end();
 
     } catch (error) {
@@ -1172,72 +1143,10 @@ doc.moveTo(labelX, doc.y)
             );
 
             doc.moveDown(0.5);
+            await drawSignature(doc, pageWidth, margin);
+            doc.end();
 
-                    /* SIGNATURE */
-
-            const [sigResult] = await db.query(
-                "SELECT file_path FROM clinic_signature ORDER BY id DESC LIMIT 1"
-            );
-
-            if (sigResult.length > 0 && sigResult[0].file_path) {
-
-                const signaturePath = sigResult[0].file_path;
-
-                try {
-                    // Signature scaling constraints
-                    const maxWidth = 140;
-                    const maxHeight = 75;
-                    const minWidth = 80;
-
-                    const image = doc.openImage(signaturePath);
-                    const imgAspectRatio = image.width / image.height;
-
-                    // Calculate scaled dimensions maintaining aspect ratio
-                    let sigWidth = maxWidth;
-                    let sigHeight = maxWidth / imgAspectRatio;
-
-                    // If height exceeds max, scale down by height
-                    if (sigHeight > maxHeight) {
-                      sigHeight = maxHeight;
-                      sigWidth = maxHeight * imgAspectRatio;
-                    }
-
-                    // Ensure minimum width
-                    if (sigWidth < minWidth) {
-                      sigWidth = minWidth;
-                      sigHeight = minWidth / imgAspectRatio;
-                    }
-
-                    // Center signature horizontally
-                    const sigX = pageWidth - margin - sigWidth - 10;
-                    const sigY = doc.y + 8;
-
-                    doc.image(signaturePath, sigX, sigY, {
-                        width: sigWidth,
-                        height: sigHeight
-                    });
-
-                    doc.font("Helvetica-Bold")
-                        .fontSize(10)
-                        .text(
-                            "Authorized Signature",
-                            sigX - 20,
-                            sigY + sigHeight + 8,
-                            {
-                                width: sigWidth + 40,
-                                align: "center",
-                                lineBreak: false
-                            }
-                        );
-                } catch (imgError) {
-                    console.error("Error loading signature image:", imgError);
-                    // Skip signature if image fails
-                }
-            }
-
-                    doc.end();
-
-                } catch (error) {
+        } catch (error) {
                     console.error(error);
                     res.status(500).send("Error generating PDF");
                 }
@@ -1370,7 +1279,7 @@ router.post("/upload-signature", protect, authorize("admin"), uploadSignature.si
     }
 
     const clinicId = req.user?.clinic_id ?? 1;
-    const filePath = `uploads/signature/${req.file.filename}`;
+    const filePath = req.file.path;
 
     await db.query(
       "INSERT INTO clinic_signature (clinic_id, file_path) VALUES (?, ?)",
@@ -1417,27 +1326,18 @@ router.get("/current-signature", protect, authorize("admin"), async (req, res) =
 router.get("/signature-image", protect, authorize("admin"), async (req, res) => {
   try {
     const clinicId = req.user?.clinic_id ?? 1;
+
     const [rows] = await db.query(
       "SELECT file_path FROM clinic_signature WHERE clinic_id = ? ORDER BY id DESC LIMIT 1",
       [clinicId]
     );
 
     if (rows.length > 0) {
-      const filePath = rows[0].file_path;
-      const fullPath = path.join(__dirname, "..", filePath);
-
-      // Check if file exists
-      if (fs.existsSync(fullPath)) {
-        // Set proper headers
-        res.type("image/*");
-        res.header("Cache-Control", "public, max-age=3600");
-        res.sendFile(fullPath);
-      } else {
-        res.status(404).json({ message: "Signature file not found" });
-      }
-    } else {
-      res.status(404).json({ message: "No signature uploaded" });
+      return res.json({ filePath: rows[0].file_path });
     }
+
+    res.status(404).json({ message: "No signature found" });
+
   } catch (error) {
     console.error("Get signature image error:", error);
     res.status(500).json({ message: "Failed to get signature image" });
@@ -1467,25 +1367,18 @@ router.get("/signatures", protect, authorize("admin"), async (req, res) => {
 router.get("/signature/:id", protect, authorize("admin"), async (req, res) => {
   try {
     const clinicId = req.user?.clinic_id ?? 1;
+
     const [rows] = await db.query(
       "SELECT file_path FROM clinic_signature WHERE id = ? AND clinic_id = ?",
       [req.params.id, clinicId]
     );
 
     if (rows.length > 0) {
-      const filePath = rows[0].file_path;
-      const fullPath = path.join(__dirname, "..", filePath);
-
-      if (fs.existsSync(fullPath)) {
-        res.type("image/*");
-        res.header("Cache-Control", "no-cache");
-        res.sendFile(fullPath);
-      } else {
-        res.status(404).json({ message: "Signature file not found" });
-      }
-    } else {
-      res.status(404).json({ message: "Signature not found" });
+      return res.json({ filePath: rows[0].file_path });
     }
+
+    res.status(404).json({ message: "Signature not found" });
+
   } catch (error) {
     console.error("Get signature by id error:", error);
     res.status(500).json({ message: "Failed to get signature" });
@@ -1520,6 +1413,7 @@ router.post("/signature/:id/set-current", protect, authorize("admin"), async (re
 router.delete("/signature/:id", protect, authorize("admin"), async (req, res) => {
   try {
     const clinicId = req.user?.clinic_id ?? 1;
+
     const [rows] = await db.query(
       "SELECT file_path FROM clinic_signature WHERE id = ? AND clinic_id = ?",
       [req.params.id, clinicId]
@@ -1529,18 +1423,21 @@ router.delete("/signature/:id", protect, authorize("admin"), async (req, res) =>
       return res.status(404).json({ message: "Signature not found" });
     }
 
-    const filePath = rows[0].file_path;
-    const fullPath = path.join(__dirname, "..", filePath);
+    const cloudinary = require("../config/cloudinary");
 
-    // Delete file from disk if it exists
-    if (fs.existsSync(fullPath)) {
-      fs.unlinkSync(fullPath);
-    }
+    const url = rows[0].file_path;
 
-    // Delete from database
+    // extract public_id
+    const parts = url.split("/");
+    const fileName = parts[parts.length - 1];
+    const publicId = `clinic-signatures/${fileName.split(".")[0]}`;
+
+    await cloudinary.uploader.destroy(publicId);
+
     await db.query("DELETE FROM clinic_signature WHERE id = ?", [req.params.id]);
 
     res.json({ message: "Signature deleted successfully" });
+
   } catch (error) {
     console.error("Delete signature error:", error);
     res.status(500).json({ message: "Failed to delete signature" });
@@ -1680,75 +1577,13 @@ router.get("/invoice/pdf/:id", protect, authorize("admin", "staff"), async (req,
     });
 
     // ================= SIGNATURE (COPIED FROM YOUR REPORT) =================
-    const [sigResult] = await db.query(
-      "SELECT file_path FROM clinic_signature ORDER BY id DESC LIMIT 1"
-    );
-
-    if (sigResult.length > 0 && sigResult[0].file_path) {
-      const signaturePath = sigResult[0].file_path;
-      const signatureFullPath = path.join(__dirname, "..", signaturePath);
-
-      try {
-        if (!fs.existsSync(signatureFullPath)) {
-          throw new Error(`Signature file not found: ${signatureFullPath}`);
-        }
-
-        // Keep the signature within a bounding box & maintain aspect ratio.
-        const maxWidth = 140;
-        const maxHeight = 75;
-        const minWidth = 80;
-
-        const image = doc.openImage(signatureFullPath);
-        const ratio = image.width / image.height;
-
-        let sigWidth = maxWidth;
-        let sigHeight = maxWidth / ratio;
-
-        if (sigHeight > maxHeight) {
-          sigHeight = maxHeight;
-          sigWidth = maxHeight * ratio;
-        }
-
-        if (sigWidth < minWidth) {
-          sigWidth = minWidth;
-          sigHeight = minWidth / ratio;
-        }
-
-        // Position signature at the right side without overlapping existing content.
-        const desiredY = doc.y + 20;
-        const bottomLimit = doc.page.height - margin - sigHeight - 10;
-        const sigY = Math.min(desiredY, bottomLimit);
-        const sigX = pageWidth - margin - sigWidth - 10;
-
-        doc.image(signatureFullPath, sigX, sigY, {
-          width: sigWidth,
-          height: sigHeight
-        });
-
-        doc.font("Helvetica-Bold")
-          .fontSize(10)
-          .text(
-            "Authorized Signature",
-            sigX - 20,
-            sigY + sigHeight + 8,
-            {
-              width: sigWidth + 40,
-              align: "center"
-            }
-          );
-      } catch (err) {
-        console.log("Signature error:", err);
-      }
-    }
-
+    await drawSignature(doc, pageWidth, margin);
     doc.end();
-
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Failed to generate invoice" });
   }
-});                          
-
+});
 /* =========================================
    PUBLIC INVOICE PDF (No Login)
 ========================================= */
@@ -1849,65 +1684,7 @@ router.get("/invoice/public/:id", async (req, res) => {
     doc.text("Thank you for visiting", 0, totalY + 50, { align: "center" });
 
     // ================= SIGNATURE =================
-    const [sigResult] = await db.query(
-      "SELECT file_path FROM clinic_signature ORDER BY id DESC LIMIT 1"
-    );
-
-    if (sigResult.length > 0 && sigResult[0].file_path) {
-      const signaturePath = sigResult[0].file_path;
-      const signatureFullPath = path.join(__dirname, "..", signaturePath);
-
-      try {
-        if (!fs.existsSync(signatureFullPath)) {
-          throw new Error(`Signature file not found: ${signatureFullPath}`);
-        }
-
-        // Keep the signature within a bounding box & maintain aspect ratio.
-        const maxWidth = 140;
-        const maxHeight = 75;
-        const minWidth = 80;
-
-        const image = doc.openImage(signatureFullPath);
-        const ratio = image.width / image.height;
-
-        let sigWidth = maxWidth;
-        let sigHeight = maxWidth / ratio;
-
-        if (sigHeight > maxHeight) {
-          sigHeight = maxHeight;
-          sigWidth = maxHeight * ratio;
-        }
-
-        if (sigWidth < minWidth) {
-          sigWidth = minWidth;
-          sigHeight = minWidth / ratio;
-        }
-
-        const desiredY = doc.y + 20;
-        const bottomLimit = doc.page.height - margin - sigHeight - 10;
-        const sigY = Math.min(desiredY, bottomLimit);
-        const sigX = pageWidth - margin - sigWidth - 10;
-
-        doc.image(signatureFullPath, sigX, sigY, {
-          width: sigWidth,
-          height: sigHeight
-        });
-
-        doc.font("Helvetica-Bold")
-          .fontSize(10)
-          .text(
-            "Authorized Signature",
-            sigX - 20,
-            sigY + sigHeight + 8,
-            {
-              width: sigWidth + 40,
-              align: "center"
-            }
-          );
-      } catch (err) {
-        console.log("Signature error:", err);
-      }
-    }
+    await drawSignature(doc, pageWidth, margin);
 
     doc.end();
   } catch (err) {

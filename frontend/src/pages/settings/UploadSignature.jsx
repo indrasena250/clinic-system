@@ -12,8 +12,8 @@ import {
   Grid
 } from "@mui/material";
 import { CloudUpload, Image, Refresh, Delete } from "@mui/icons-material";
-import { uploadSignature, getAllSignatures, getSignatureImage, deleteSignature } from "../../api/settingsApi";
 import API from "../../api/axios";
+import { uploadSignature, getAllSignatures, deleteSignature } from "../../api/settingsApi";
 
 const UploadSignature = () => {
   const [selectedFile, setSelectedFile] = useState(null);
@@ -32,16 +32,14 @@ const UploadSignature = () => {
     try {
       // Clean up old blob URL if it exists
       if (currentSignature && currentSignature.startsWith("blob:")) {
-        URL.revokeObjectURL(currentSignature);
+        
       }
 
       // Add cache-busting query parameter to force fresh fetch
       const timestamp = new Date().getTime();
-      const res = await API.get(`/patients/signature-image?t=${timestamp}`, {
-        responseType: "blob"
-      });
-      const url = URL.createObjectURL(res.data);
-      setCurrentSignature(url);
+      const res = await API.get(`/patients/signature-image?t=${timestamp}`);
+
+      setCurrentSignature(res.data.filePath);
     } catch (err) {
       console.error("Failed to fetch current signature:", err);
       setCurrentSignature(null);
@@ -59,15 +57,10 @@ const UploadSignature = () => {
       
       // Preload all signature images as blobs
       const urls = {};
-      for (const sig of sigs) {
-        try {
-          const blob = await getSignatureImage(sig.id);
-          urls[sig.id] = URL.createObjectURL(blob);
-        } catch (err) {
-          console.error(`Failed to load image for signature ${sig.id}:`, err);
-        }
-      }
-      setSignatureUrls(urls);
+for (const sig of sigs) {
+  urls[sig.id] = sig.file_path;
+}
+setSignatureUrls(urls);
     } catch (err) {
       console.error("Failed to fetch all signatures:", err);
       setAllSignatures([]);
@@ -78,15 +71,10 @@ const UploadSignature = () => {
 
   const handleSelectSignature = async (id) => {
     try {
-      const blob = await getSignatureImage(id);
-      const url = URL.createObjectURL(blob);
-      
-      // Clean up old URL if needed
-      if (currentSignature && currentSignature.startsWith("blob:")) {
-        URL.revokeObjectURL(currentSignature);
-      }
-      
-      setCurrentSignature(url);
+      const selected = allSignatures.find(sig => sig.id === id);
+if (selected) {
+  setCurrentSignature(selected.file_path);
+}
     } catch (err) {
       console.error("Failed to select signature:", err);
       setError("Failed to select signature");
@@ -101,6 +89,7 @@ const UploadSignature = () => {
         await deleteSignature(id);
         setSuccess("Signature deleted successfully!");
         await fetchAllSignatures();
+        await fetchCurrentSignature();
       } catch (err) {
         console.error("Failed to delete signature:", err);
         setError("Failed to delete signature");
@@ -114,16 +103,7 @@ const UploadSignature = () => {
 
     // Cleanup object URLs on component unmount
     return () => {
-      if (currentSignature && currentSignature.startsWith("blob:")) {
-        URL.revokeObjectURL(currentSignature);
-      }
-      if (preview) {
-        URL.revokeObjectURL(preview);
-      }
       Object.values(signatureUrls).forEach(url => {
-        if (url && url.startsWith("blob:")) {
-          URL.revokeObjectURL(url);
-        }
       });
     };
   }, []);
