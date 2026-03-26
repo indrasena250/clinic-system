@@ -36,8 +36,8 @@ const DoctorReferral = () => {
   });
   const [editingId, setEditingId] = useState(null);
 
-  // Generate referral amount options from 100 to 1500 in increments of 100
-  const referralAmountOptions = Array.from({ length: 15 }, (_, i) => (i + 1) * 100);
+  // Generate referral amount options from 0 to 1500 in increments of 100
+  const referralAmountOptions = [0, ...Array.from({ length: 15 }, (_, i) => (i + 1) * 100)];
 
   /* ============================
      Load Patients
@@ -159,7 +159,7 @@ const DoctorReferral = () => {
       width: 180,
       renderCell: (params) => {
         const rowId = params.row.id;
-        const currentValue = params.row.referral_amount || 100;
+        const currentValue = params.row.referral_amount ?? 100;
         const isEditing = editingId === rowId;
 
         return (

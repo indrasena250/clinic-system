@@ -5,6 +5,12 @@
  */
 
 const db = require("../config/db");
+const dayjs = require("dayjs");
+const utc = require("dayjs/plugin/utc");
+const timezone = require("dayjs/plugin/timezone");
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 const DEFAULT_START = "2000-01-01 00:00:00";
 
@@ -14,7 +20,7 @@ const DEFAULT_START = "2000-01-01 00:00:00";
  * @returns {Promise<boolean>}
  */
 async function hasSettlementToday(clinicId) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = dayjs().tz("Asia/Kolkata").format("YYYY-MM-DD");
   const [rows] = await db.query(
     `SELECT id FROM settlements WHERE clinic_id = ? AND DATE(created_at) = ?`,
     [clinicId, today]
@@ -34,10 +40,8 @@ async function getLastSettlementToTime(clinicId) {
   );
   if (!rows[0]?.to_time) return null;
   const dt = rows[0].to_time;
-  if (dt instanceof Date) {
-    return dt.toISOString().slice(0, 19).replace("T", " ");
-  }
-  return String(dt);
+  const parsed = dt instanceof Date ? dayjs(dt) : dayjs(String(dt));
+  return parsed.tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss");
 }
 
 /**
@@ -51,8 +55,10 @@ async function getLastSettlementInfo(clinicId) {
     [clinicId]
   );
   if (!rows[0]) return null;
-  const to = rows[0].to_time instanceof Date ? rows[0].to_time.toISOString().slice(0, 19).replace("T", " ") : String(rows[0].to_time);
-  const from = rows[0].from_time instanceof Date ? rows[0].from_time.toISOString().slice(0, 19).replace("T", " ") : String(rows[0].from_time);
+  const toValue = rows[0].to_time;
+  const fromValue = rows[0].from_time;
+  const to = (toValue instanceof Date ? dayjs(toValue) : dayjs(String(toValue))).tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss");
+  const from = (fromValue instanceof Date ? dayjs(fromValue) : dayjs(String(fromValue))).tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss");
   return { to_time: to, from_time: from };
 }
 
@@ -131,13 +137,14 @@ async function executeSettlement(clinicId) {
       throw new Error(`Invalid clinic_id: ${clinicId}`);
     }
 
-    const toTime = new Date().toISOString().slice(0, 19).replace("T", " ");
+    const toTime = dayjs().tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss");
     let fromTime = await getLastSettlementToTime(clinicId);
 
     if (!fromTime) {
       const earliest = await getEarliestDataTime(clinicId);
       fromTime = earliest || DEFAULT_START;
     }
+    // if fromTime is old UTC, keep as-is; was saved in same timezone style as toTime in this service.
 
     const { income, extraIncome, expenses } = await calculateTotalsForRange(clinicId, fromTime, toTime);
 

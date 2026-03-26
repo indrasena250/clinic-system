@@ -14,6 +14,9 @@ import UltrasoundList from "../pages/patients/UltrasoundList";
 import DoctorReferrals from "../pages/referrals/DoctorReferrals";
 import DoctorSettlement from "../pages/referrals/DoctorSettlement";
 
+// Settlement History
+import SettlementHistory from "../pages/SettlementHistory";
+
 // Finance
 import DailyExpense from "../pages/finance/DailyExpense";
 import ExtraIncome from "../pages/finance/ExtraIncome";
@@ -52,6 +55,7 @@ const AppRoutes = () => {
           {/* Doctor */}
           <Route path="referrals" element={<DoctorReferrals />} />
           <Route path="doctor-settlement" element={<DoctorSettlement />} />
+          <Route path="settlement-history" element={<SettlementHistory />} />
 
           {/* Finance */}
           <Route path="finance/expenses" element={<DailyExpense />} />

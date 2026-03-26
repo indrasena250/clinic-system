@@ -48,6 +48,10 @@ const SettleButton = ({ onSettlementComplete }) => {
       };
       setReportData(normalized);
       setReportOpen(true);
+      // Dispatch event to notify other pages (like DailyReport) about settlement
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("settlementComplete"));
+      }
     } catch (err) {
       console.error("Settlement error:", err);
       alert(err.response?.data?.message || "Failed to process settlement");

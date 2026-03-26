@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useEffect } from "react";
 import {
   Box,
   Drawer,
@@ -26,6 +27,7 @@ import {
   AccountBalanceWallet as SettlementIcon,
   Payment as PaymentIcon,
   Description as ReportIcon,
+  History as HistoryIcon,
   Settings as SettingsIcon,
   Draw as SignatureIcon,
 } from "@mui/icons-material";
@@ -39,9 +41,12 @@ const DashboardLayout = () => {
 
   const navigate = useNavigate();
   const location = useLocation();
+  useEffect(() => {
+  setMobileOpen(false);
+}, [location.pathname]);
 
   const handleDrawerToggle = () => {
-    setMobileOpen(!mobileOpen);
+    setMobileOpen(prev => !prev);
   };
 
   const isActive = (path) => location.pathname.startsWith(path);
@@ -123,6 +128,16 @@ const DashboardLayout = () => {
             <PaymentIcon />
           </ListItemIcon>
           <ListItemText primary="Doctor Settlement" />
+        </ListItemButton>
+
+        <ListItemButton
+          selected={isActive("/settlement-history")}
+          onClick={() => navigate("/settlement-history")}
+        >
+          <ListItemIcon>
+            <ReportIcon />
+          </ListItemIcon>
+          <ListItemText primary="Settlement History" />
         </ListItemButton>
 
         <Divider sx={{ my: 1 }} />
@@ -208,7 +223,11 @@ const DashboardLayout = () => {
               <MenuIcon />
             </IconButton>
 
-            <Typography variant="h6" noWrap>
+            <Typography
+              variant="h6"
+              noWrap
+              sx={{ fontSize: { xs: "14px", sm: "18px" } }}
+            >
               Diagnostic Center Management System
             </Typography>
           </Box>
@@ -227,15 +246,15 @@ const DashboardLayout = () => {
           </IconButton>
           </Tooltip>
 
-          <Tooltip title="CT">
-          <IconButton onClick={() => navigate("/patients/ct")} sx={iconStyle(isActive("/patients/ct"))}>
-            <ScanIcon />
-          </IconButton>
-          </Tooltip>
-
           <Tooltip title="Ultrasound">
           <IconButton onClick={() => navigate("/patients/ultrasound")} sx={iconStyle(isActive("/patients/ultrasound"))}>
             <UltrasoundIcon />
+          </IconButton>
+          </Tooltip>
+
+          <Tooltip title="CT">
+          <IconButton onClick={() => navigate("/patients/ct")} sx={iconStyle(isActive("/patients/ct"))}>
+            <ScanIcon />
           </IconButton>
           </Tooltip>
 
@@ -269,6 +288,12 @@ const DashboardLayout = () => {
           </IconButton>
           </Tooltip>
 
+          <Tooltip title="Settlement History">
+          <IconButton onClick={() => navigate("/settlement-history")} sx={iconStyle(isActive("/settlement-history"))}>
+            <HistoryIcon />
+          </IconButton>
+          </Tooltip>
+
           <Tooltip title="Settings">
           <IconButton onClick={() => navigate("/settings/signature")} sx={iconStyle(isActive("/settings"))}>
             <SettingsIcon />
@@ -279,36 +304,45 @@ const DashboardLayout = () => {
         </Toolbar>
       </AppBar>
 
-      {/* Drawer - Mobile Only */}
-      <Box component="nav" sx={{ width: { sm: 0 }, flexShrink: { sm: 0 } }}>
-        <Drawer
-          variant="temporary"
-          open={mobileOpen}
-          onClose={handleDrawerToggle}
-          ModalProps={{ keepMounted: true }}
+        {/* Drawer - Mobile Only */}
+        <Box component="nav">
+          <Drawer
+            variant="temporary"
+            open={mobileOpen}
+            onClose={handleDrawerToggle}
+            ModalProps={{ keepMounted: true }}
+            sx={{
+              display: { xs: "block", sm: "none" },
+              "& .MuiDrawer-paper": {
+                width: drawerWidth,
+                boxSizing: "border-box",
+              },
+            }}
+          >
+            {/* ✅ Auto close on click */}
+            <Box
+          onClick={handleDrawerToggle}
+          sx={{ height: "100%" }}
+        >
+              {drawerContent}
+            </Box>
+          </Drawer>
+        </Box>
+
+        {/* Page Content */}
+        <Box
+          component="main"
           sx={{
-            display: { xs: "block", sm: "none" },
-            "& .MuiDrawer-paper": { width: drawerWidth },
+            flexGrow: 1,
+            p: { xs: 2, sm: 3 },   // ✅ responsive padding
+            width: "100%",
+            mt: { xs: 7, sm: 8 },  // ✅ responsive top spacing
+            transition: "all 0.2s ease",
           }}
         >
-          {drawerContent}
-        </Drawer>
-      </Box>
-
-      {/* Page Content */}
-      <Box
-        component="main"
-        sx={{
-          flexGrow: 1,
-          p: 3,
-          width: '100%',
-          mt: 8,
-        }}
-      >
-        <Outlet />
-      </Box>
-    </Box>
-  );
-};
+          <Outlet />
+        </Box> 
+            </Box>  );
+        };
 
 export default DashboardLayout;

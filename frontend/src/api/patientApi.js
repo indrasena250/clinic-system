@@ -46,6 +46,18 @@ export const downloadSettlementPDF = async (doctor, fromDate, toDate) => {
 
 };
 
+export const fetchSettlementHistory = async () => {
+  const res = await API.get("/patients/settlement-history");
+  return res.data;
+};
+
+export const downloadSettlementPeriodPDF = async (settlementId) => {
+  const res = await API.get(`/patients/settlement-pdf/${settlementId}`, {
+    responseType: "blob",
+  });
+  return res.data;
+};
+
 export const fetchTodaySummary = async () => {
   const res = await API.get("/patients/dashboard-summary");
   return res.data;

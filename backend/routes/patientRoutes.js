@@ -5,6 +5,12 @@ const router = express.Router();
 const db = require("../config/db");
 const pool = require("../config/db");
 const dayjs = require("dayjs");
+const utc = require("dayjs/plugin/utc");
+const timezone = require("dayjs/plugin/timezone");
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
 const multer = require("multer");
 const { CloudinaryStorage } = require("multer-storage-cloudinary");
 const cloudinary = require("../config/cloudinary");
@@ -118,11 +124,14 @@ router.post("/add", protect, authorize("admin", "staff"), async (req, res) => {
     if (upload_date && upload_date.length === 10) {
       finalDate = dayjs(upload_date).format("YYYY-MM-DD") + " " + dayjs().format("HH:mm:ss");
     }
+    
+    // Use IST timezone for created_at to match settlement timestamps
+    const istNow = dayjs().tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss");
 
     const sql = `
       INSERT INTO patients
       (clinic_id, upload_date, patient_name, age, gender, mobile, address, scan_category, scan_name, referred_doctor, amount, referral_amount, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     const [result] = await db.query(sql, [
@@ -137,7 +146,8 @@ router.post("/add", protect, authorize("admin", "staff"), async (req, res) => {
       scan_name,
       referred_doctor,
       amount,
-      referral_amount || 0
+      referral_amount || 0,
+      istNow
     ]);
 
     const patientId = result.insertId;
@@ -406,12 +416,12 @@ router.put("/referral/:id", protect, authorize("admin", "staff"), async (req, re
 
   try {
     referral_amount = Number(referral_amount) || 0;
-    if (!referral_amount || referral_amount === 0) {
+    if (referral_amount === null || referral_amount === undefined) {
       const [currentRow] = await pool.query(
         `SELECT referral_amount FROM patients WHERE id = ? AND clinic_id = ?`,
         [id, clinicId]
       );
-      
+
       if (currentRow.length > 0 && currentRow[0].referral_amount) {
         referral_amount = currentRow[0].referral_amount;
       }
@@ -698,9 +708,12 @@ async (req, res) => {
 router.post("/add-expense", protect, authorize("admin"), (req, res) => {
     const clinicId = req.user?.clinic_id ?? 1;
     const { expense_date, description, amount } = req.body;
+    
+    // Use IST timezone for created_at to match settlement timestamps
+    const istNow = dayjs().tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss");
 
-    const sql = `INSERT INTO expenses (clinic_id, expense_date, description, amount) VALUES (?, ?, ?, ?)`;
-    db.query(sql, [clinicId, expense_date, description, amount], (err, result) => {
+    const sql = `INSERT INTO expenses (clinic_id, expense_date, description, amount, created_at) VALUES (?, ?, ?, ?, ?)`;
+    db.query(sql, [clinicId, expense_date, description, amount, istNow], (err, result) => {
         if (err) {
             return res.status(500).json({ message: "Error adding expense" });
         }
@@ -729,19 +742,19 @@ router.get(
       let from, to;
       
       if (settlementRows[0]) {
-        // Use settlement window times
+        // From last settlement to_time to current IST moment
         const st = settlementRows[0];
-        from = st.from_time instanceof Date ? st.from_time : new Date(st.from_time);
-        to = st.to_time instanceof Date ? st.to_time : new Date(st.to_time);
+        from = st.to_time instanceof Date ? dayjs(st.to_time).tz("Asia/Kolkata") : dayjs(String(st.to_time)).tz("Asia/Kolkata");
+        to = dayjs().tz("Asia/Kolkata");
       } else {
-        // Fallback: use date range for the day
-        const day = dayjs(date, "YYYY-MM-DD");
-        from = day.startOf("day");
-        to = from.add(1, "day");
+        // Fallback: from start of today IST to now IST
+        const now = dayjs().tz("Asia/Kolkata");
+        from = now.startOf("day");
+        to = now;
       }
       
-      const fromStr = from instanceof Date ? from.toISOString().slice(0, 19).replace("T", " ") : from.format("YYYY-MM-DD HH:mm:ss");
-      const toStr = to instanceof Date ? to.toISOString().slice(0, 19).replace("T", " ") : to.format("YYYY-MM-DD HH:mm:ss");
+      const fromStr = from.format("YYYY-MM-DD HH:mm:ss");
+      const toStr = to.format("YYYY-MM-DD HH:mm:ss");
 
       let patientIncome;
       try {
@@ -836,19 +849,19 @@ router.get("/daily-report-pdf/:date",protect, authorize("admin"), async (req, re
         let from, to;
         
         if (settlementRows[0]) {
-          // Use settlement window
-          from = settlementRows[0].from_time instanceof Date ? 
-            settlementRows[0].from_time.toISOString().slice(0, 19).replace("T", " ") : 
-            String(settlementRows[0].from_time);
-          to = settlementRows[0].to_time instanceof Date ? 
-            settlementRows[0].to_time.toISOString().slice(0, 19).replace("T", " ") : 
-            String(settlementRows[0].to_time);
+          // From last settlement to_time to current IST time
+          const st = settlementRows[0];
+          from = st.to_time instanceof Date ? dayjs(st.to_time).tz("Asia/Kolkata") : dayjs(String(st.to_time)).tz("Asia/Kolkata");
+          to = dayjs().tz("Asia/Kolkata");
         } else {
-          // Fallback: use day window
-          const dayWindow = getWindowForDate(date);
-          from = dayWindow.from;
-          to = dayWindow.to;
+          // From start of today IST to current IST
+          const now = dayjs().tz("Asia/Kolkata");
+          from = now.startOf("day");
+          to = now;
         }
+        
+        const fromStr = from.format("YYYY-MM-DD HH:mm:ss");
+        const toStr = to.format("YYYY-MM-DD HH:mm:ss");
 
         let results;
         try {
@@ -857,7 +870,7 @@ router.get("/daily-report-pdf/:date",protect, authorize("admin"), async (req, re
              FROM patients p
              WHERE p.clinic_id = ? AND p.created_at >= ? AND p.created_at < ?
              ORDER BY FIELD(p.scan_category, 'Ultrasound', 'CT'), p.id ASC`,
-            [clinicId, from, to]
+            [clinicId, fromStr, toStr]
           );
           results = rows;
         } catch (e) {
@@ -898,7 +911,9 @@ router.get("/daily-report-pdf/:date",protect, authorize("admin"), async (req, re
             .text("Daily Financial Report", { align: "center" });
 
         doc.moveDown(0.5);
-        doc.fontSize(10).text(`Window: ${from}  to  ${to}`, { align: "right" });
+        const dispFrom = dayjs(fromStr).tz("Asia/Kolkata").format("DD/MM/YYYY hh:mm A");
+        const dispTo = dayjs(toStr).tz("Asia/Kolkata").format("DD/MM/YYYY hh:mm A");
+        doc.fontSize(10).text(`Report Range: ${dispFrom} to ${dispTo}`, { align: "center" });
         doc.moveDown(2);
 
         /* TABLE */
@@ -978,7 +993,7 @@ router.get("/daily-report-pdf/:date",protect, authorize("admin"), async (req, re
         try {
           const [rows] = await db.query(
               `SELECT expense_date, description, amount FROM expenses WHERE clinic_id = ? AND created_at >= ? AND created_at < ? ORDER BY expense_date ASC`,
-              [clinicId, from, to]
+              [clinicId, fromStr, toStr]
           );
           expenseRows = rows;
         } catch (e) {
@@ -1000,7 +1015,7 @@ router.get("/daily-report-pdf/:date",protect, authorize("admin"), async (req, re
         try {
           const [rows] = await db.query(
               `SELECT income_date, income_type, description, amount FROM extra_income WHERE clinic_id = ? AND created_at >= ? AND created_at < ? ORDER BY income_date ASC`,
-              [clinicId, from, to]
+              [clinicId, fromStr, toStr]
           );
           extraRows = rows;
         } catch (e) {
@@ -1118,30 +1133,43 @@ if (totalExtra > 0) {
 }
 
 doc.moveDown(0.5);
+// ===== TOP LINE =====
+const lineY1 = doc.y;
 
-doc.moveTo(labelX, doc.y)
-   .lineTo(pageWidth - margin, doc.y)
+doc.moveTo(labelX, lineY1)
+   .lineTo(pageWidth - margin, lineY1)
    .stroke();
 
-        doc.moveTo(labelX, doc.y)
-            .lineTo(pageWidth - margin, doc.y)
-            .stroke();
+// ===== TEXT =====
+doc.moveDown(0.7);
 
-        doc.moveDown();
+const textY = doc.y;
 
-            doc.font("Helvetica-Bold")
-            .fontSize(15)   // Increased size
-            .text("FINAL NET COLLECTION", labelX, doc.y, { lineBreak: false });
+doc.font("Helvetica-Bold")
+   .fontSize(15)
+   .text("FINAL NET COLLECTION", labelX, textY, {
+     lineBreak: false
+   });
 
-            doc.font("Helvetica-Bold")
-            .fontSize(18)
-            .text(
-                `Rs. ${finalNet.toFixed(2)}`,
-                valueX,
-                doc.y,
-                { align: "right", lineBreak: false }
-            );
+doc.font("Helvetica-Bold")
+   .fontSize(18)
+   .text(
+     `Rs. ${finalNet.toFixed(2)}`,
+     valueX,
+     textY,
+     {
+       width: 120,
+       align: "right",
+       lineBreak: false
+     }
+   );
 
+// ===== BOTTOM LINE =====
+const lineY2 = doc.y;
+
+doc.moveTo(labelX, lineY2)
+   .lineTo(pageWidth - margin, lineY2)
+   .stroke();
             doc.moveDown(0.5);
             await drawSignature(doc, pageWidth, margin);
             doc.end();
@@ -1153,6 +1181,371 @@ doc.moveTo(labelX, doc.y)
             });
 
 /* =========================================
+   SETTLEMENT PDF REPORT (By Settlement ID)
+========================================= */
+router.get("/settlement-pdf/:settlementId", protect, authorize("admin"), async (req, res) => {
+    try {
+        const clinicId = req.user?.clinic_id ?? 1;
+        const { settlementId } = req.params;
+
+        // Get the specific settlement details
+        const [settlementRows] = await db.query(
+            `SELECT from_time, to_time, amount FROM settlements WHERE clinic_id = ? AND id = ?`,
+            [clinicId, settlementId]
+        );
+
+        if (!settlementRows[0]) {
+            return res.status(404).json({ message: "Settlement not found" });
+        }
+
+        const settlement = settlementRows[0];
+        const from = settlement.from_time instanceof Date ? dayjs(settlement.from_time).tz("Asia/Kolkata") : dayjs(String(settlement.from_time)).tz("Asia/Kolkata");
+        const to = settlement.to_time instanceof Date ? dayjs(settlement.to_time).tz("Asia/Kolkata") : dayjs(String(settlement.to_time)).tz("Asia/Kolkata");
+
+        const fromStr = from.format("YYYY-MM-DD HH:mm:ss");
+        const toStr = to.format("YYYY-MM-DD HH:mm:ss");
+
+        let results;
+        try {
+            const [rows] = await db.query(
+                `SELECT p.id, p.patient_name, p.scan_name, p.referred_doctor, p.amount, IFNULL(p.referral_amount, 0) AS referral_amount
+                 FROM patients p
+                 WHERE p.clinic_id = ? AND p.created_at >= ? AND p.created_at < ?
+                 ORDER BY FIELD(p.scan_category, 'Ultrasound', 'CT'), p.id ASC`,
+                [clinicId, fromStr, toStr]
+            );
+            results = rows;
+        } catch (e) {
+            // Fallback query if created_at doesn't exist
+            const [rows] = await db.query(
+                `SELECT p.id, p.patient_name, p.scan_name, p.referred_doctor, p.amount, IFNULL(p.referral_amount, 0) AS referral_amount
+                 FROM patients p WHERE p.clinic_id = ? AND DATE(COALESCE(p.created_at, p.upload_date)) BETWEEN ? AND ?
+                 ORDER BY FIELD(p.scan_category, 'Ultrasound', 'CT'), p.id ASC`,
+                [clinicId, from.format("YYYY-MM-DD"), to.format("YYYY-MM-DD")]
+            );
+            results = rows;
+        }
+
+        const PDFDocument = require("pdfkit");
+        const doc = new PDFDocument({ margin: 50, size: "A4" });
+
+        const buffers = [];
+        doc.on('data', buffers.push.bind(buffers));
+        doc.on('end', () => {
+            const pdfData = Buffer.concat(buffers);
+            res.setHeader("Content-Type", "application/pdf");
+            res.setHeader(
+                "Content-Disposition",
+                `attachment; filename=settlement-report-${settlementId}-${from.format("YYYY-MM-DD")}.pdf`
+            );
+            res.setHeader("Content-Length", pdfData.length);
+            res.send(pdfData);
+        });
+
+        const pageWidth = doc.page.width;
+        const pageHeight = doc.page.height;
+        const margin = 50;
+
+        /* ================= HEADER ================= */
+
+        doc.fontSize(20)
+            .font("Helvetica-Bold")
+            .text("SRIDEVI CT SCAN & DIAGNOSTIC CENTER", { align: "center" });
+
+        doc.fontSize(13)
+            .font("Helvetica")
+            .text("Settlement Report", { align: "center" });
+
+        doc.moveDown(0.5);
+
+        doc.font("Helvetica-Bold")
+            .fontSize(12)
+            .text(`Settlement Period: ${from.format("DD/MM/YYYY hh:mm A")} - ${to.format("DD/MM/YYYY hh:mm A")}`, margin);
+
+        doc.font("Helvetica")
+            .fontSize(10)
+            .text(`Settlement Amount: Rs. ${Number(settlement.amount).toFixed(2)}`);
+
+        doc.text(
+            `Generated On: ${dayjs().tz("Asia/Kolkata").format("DD/MM/YYYY hh:mm A")}`,
+            { align: "right" }
+        );
+
+        doc.moveDown(2);
+
+        /* ================= PATIENT TABLE ================= */
+
+        const startX = margin;
+        const rowHeight = 25;
+        const colWidths = [35, 105, 85, 105, 60, 50, 55];
+        const headers = ["S.No", "Patient", "Scan", "Doctor", "Total", "Ref", "Remain"];
+
+        let y = doc.y;
+
+        const drawHeader = () => {
+            let x = startX;
+            doc.font("Helvetica-Bold").fontSize(9);
+
+            headers.forEach((header, i) => {
+                doc.rect(x, y, colWidths[i], rowHeight).stroke();
+                doc.text(header, x + 5, y + 8, {
+                    width: colWidths[i] - 10,
+                    lineBreak: false
+                });
+                x += colWidths[i];
+            });
+
+            y += rowHeight;
+        };
+
+        drawHeader();
+
+        let totalRemaining = 0;
+        let serialNumber = 1;
+
+        results.forEach(row => {
+
+            if (y + rowHeight > pageHeight - 150) {
+                doc.addPage();
+                y = margin;
+                drawHeader();
+            }
+
+            const remaining = Number(row.amount) - Number(row.referral_amount);
+
+            const rowData = [
+                serialNumber++,
+                row.patient_name,
+                row.scan_name,
+                row.referred_doctor || "",
+                Number(row.amount).toFixed(2),
+                Number(row.referral_amount).toFixed(2),
+                remaining.toFixed(2)
+            ];
+
+            let x = startX;
+
+            doc.font("Helvetica").fontSize(9);
+
+            rowData.forEach((cell, i) => {
+
+                doc.rect(x, y, colWidths[i], rowHeight).stroke();
+
+                const alignRight = i >= 4 ? "right" : "left";
+
+                doc.text(String(cell), x + 5, y + 8, {
+                    width: colWidths[i] - 10,
+                    align: alignRight,
+                    lineBreak: false
+                });
+
+                x += colWidths[i];
+            });
+
+            y += rowHeight;
+            totalRemaining += remaining;
+        });
+
+        /* ================= EXPENSES ================= */
+
+        let expenseRows;
+        try {
+            const [rows] = await db.query(
+                `SELECT expense_date, description, amount FROM expenses WHERE clinic_id = ? AND created_at >= ? AND created_at < ? ORDER BY expense_date ASC`,
+                [clinicId, fromStr, toStr]
+            );
+            expenseRows = rows;
+        } catch (e) {
+            const [rows] = await db.query(
+                `SELECT expense_date, description, amount FROM expenses WHERE clinic_id = ? AND expense_date BETWEEN ? AND ? ORDER BY expense_date ASC`,
+                [clinicId, from.format("YYYY-MM-DD"), to.format("YYYY-MM-DD")]
+            );
+            expenseRows = rows;
+        }
+
+        const totalExpense = expenseRows.reduce(
+            (sum, e) => sum + (Number(e.amount) || 0),
+            0
+        );
+
+        /* ================= EXTRA INCOME ================= */
+
+        let extraRows;
+        try {
+            const [rows] = await db.query(
+                `SELECT income_date, income_type, description, amount FROM extra_income WHERE clinic_id = ? AND created_at >= ? AND created_at < ? ORDER BY income_date ASC`,
+                [clinicId, fromStr, toStr]
+            );
+            extraRows = rows;
+        } catch (e) {
+            const [rows] = await db.query(
+                `SELECT income_date, income_type, description, amount FROM extra_income WHERE clinic_id = ? AND income_date BETWEEN ? AND ? ORDER BY income_date ASC`,
+                [clinicId, from.format("YYYY-MM-DD"), to.format("YYYY-MM-DD")]
+            );
+            extraRows = rows;
+        }
+
+        const totalExtra = extraRows.reduce(
+            (sum, e) => sum + (Number(e.amount) || 0),
+            0
+        );
+
+        const totalAmount = totalRemaining;
+        const finalNet = totalAmount - totalExpense + totalExtra;
+
+        if (y + 220 > pageHeight - margin) {
+            doc.addPage();
+            y = margin;
+        }
+
+/* ================= CLEAN EXPANDED SUMMARY ================= */
+
+doc.moveDown(2);
+
+const leftX = margin;
+const rightX = pageWidth - margin - 120;
+let yPos = doc.y;
+
+// Title
+doc.font("Helvetica-Bold")
+   .fontSize(14)
+   .text("Financial Summary", leftX, yPos);
+
+yPos += 25;
+
+// ===== Total Patient Income =====
+doc.font("Helvetica")
+   .fontSize(11)
+   .text("Total Patient Income", leftX, yPos);
+
+doc.font("Helvetica-Bold")
+   .text(`Rs. ${totalAmount.toFixed(2)}`, rightX, yPos, {
+     width: 120,
+     align: "right"
+   });
+
+yPos += 20;
+
+// ===== Total Expenses =====
+doc.font("Helvetica-Bold")
+   .text("Total Expenses", leftX, yPos);
+
+doc.text(`Rs. ${totalExpense.toFixed(2)}`, rightX, yPos, {
+  width: 120,
+  align: "right"
+});
+
+yPos += 18;
+
+// 👉 Expense Breakdown
+doc.font("Helvetica").fontSize(10);
+
+expenseRows.forEach(e => {
+  doc.text(`- ${e.description || "Expense"}`, leftX + 15, yPos);
+
+  doc.text(`Rs. ${Number(e.amount).toFixed(2)}`, rightX, yPos, {
+    width: 120,
+    align: "right"
+  });
+
+  yPos += 5;
+});
+
+yPos += 10;
+
+// ===== Extra Income =====
+doc.font("Helvetica-Bold")
+   .fontSize(11)
+   .text("Extra Income", leftX, yPos);
+
+doc.text(`Rs. ${totalExtra.toFixed(2)}`, rightX, yPos, {
+  width: 120,
+  align: "right"
+});
+
+yPos += 18;
+
+// 👉 Extra Income Breakdown
+doc.font("Helvetica").fontSize(10);
+
+extraRows.forEach(e => {
+  doc.text(`- ${e.description || e.income_type || "Income"}`, leftX + 15, yPos);
+
+  doc.text(`Rs. ${Number(e.amount).toFixed(2)}`, rightX, yPos, {
+    width: 120,
+    align: "right"
+  });
+
+  yPos += 10;
+});
+
+yPos += 10;
+
+// ===== FINAL NET SECTION =====
+
+// Divider line
+doc.moveTo(leftX, yPos).lineTo(pageWidth - margin, yPos).stroke();
+
+yPos += 10;
+
+doc.font("Helvetica-Bold")
+   .fontSize(14)
+   .text("FINAL NET COLLECTION", leftX, yPos);
+
+doc.font("Helvetica-Bold")
+   .fontSize(18)
+   .text(`Rs. ${finalNet.toFixed(2)}`, rightX - 20, yPos, {
+     width: 140,
+     align: "right"
+   });
+
+yPos += 25;
+
+// Bottom divider
+doc.moveTo(leftX, yPos).lineTo(pageWidth - margin, yPos).stroke();
+        doc.moveDown(1);
+        await drawSignature(doc, pageWidth, margin);
+        doc.end();
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).send("Error generating settlement PDF");
+    }
+});
+
+/* =========================================
+   GET SETTLEMENT HISTORY
+========================================= */
+router.get("/settlement-history", protect, authorize("admin", "staff"), async (req, res) => {
+    try {
+        const clinicId = req.user?.clinic_id ?? 1;
+
+        const [rows] = await db.query(
+            `SELECT id, from_time, to_time, amount, created_at
+             FROM settlements
+             WHERE clinic_id = ?
+             ORDER BY created_at DESC`,
+            [clinicId]
+        );
+
+        // Format the datetime fields for frontend
+        const formattedRows = rows.map(row => ({
+            id: row.id,
+            from_time: row.from_time instanceof Date ? dayjs(row.from_time).tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss") : dayjs(String(row.from_time)).tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss"),
+            to_time: row.to_time instanceof Date ? dayjs(row.to_time).tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss") : dayjs(String(row.to_time)).tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss"),
+            amount: Number(row.amount),
+            created_at: row.created_at instanceof Date ? dayjs(row.created_at).tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss") : dayjs(String(row.created_at)).tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss")
+        }));
+
+        res.json(formattedRows);
+
+    } catch (error) {
+        console.error("Settlement history error:", error);
+        res.status(500).json({ message: "Error fetching settlement history" });
+    }
+});
+
+/* =========================================
    DASHBOARD SUMMARY
    (for dashboard cards - filters by last settlement time)
 ========================================= */
@@ -1160,8 +1553,8 @@ router.get("/dashboard-summary", protect, authorize("admin"), async (req, res) =
   try {
     const clinicId = req.user?.clinic_id ?? 1;
     
-    // Get today's data
-    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    // Get today's data in IST
+    const today = dayjs().tz("Asia/Kolkata").format("YYYY-MM-DD"); // YYYY-MM-DD
     
     const [todayPatients] = await db.query(
       `SELECT

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Paper, Typography, Grid, Card, CardContent, Button, Stack, TextField } from "@mui/material";
 
 import { getDailyReportSummary, downloadDailyReportPdf } from "../../api/reportApi";
@@ -9,7 +9,7 @@ import timezone from "dayjs/plugin/timezone";
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
-import { formatDate } from "../../utils/date";
+import { formatDateTimeRange } from "../../utils/date";
 
 const DailyReport = () => {
 
@@ -22,11 +22,22 @@ const DailyReport = () => {
     net: 0
   });
 
-  const [selectedDate, setSelectedDate] = useState(dayjs().tz("Asia/Kolkata").format("YYYY-MM-DD"));
+  const [reportWindow, setReportWindow] = useState({ from: null, to: null });
+  const [lastLoadTime, setLastLoadTime] = useState(0);
+  const loadTimeoutRef = useRef(null);
+  const MIN_LOAD_INTERVAL = 3000; // Minimum 3 seconds between API calls
 
-  const loadReport = async (date = selectedDate) => {
+  const loadReport = async () => {
+    const now = Date.now();
+    
+    // Prevent rapid successive loads
+    if (now - lastLoadTime < MIN_LOAD_INTERVAL) {
+      console.log("Load skipped: too soon after last load");
+      return;
+    }
+
     try {
-      const summary = await getDailyReportSummary(date);
+      const summary = await getDailyReportSummary(dayjs().format("YYYY-MM-DD"));
       setData({
         ct: summary.ct ?? 0,
         usg: summary.usg ?? 0,
@@ -35,24 +46,71 @@ const DailyReport = () => {
         expenses: summary.expenses ?? 0,
         net: summary.net ?? 0
       });
+      setReportWindow(summary.window || { from: null, to: null });
+      setLastLoadTime(now);
     } catch (error) {
       console.error("Daily report load error:", error);
+      if (error.response?.status === 429) {
+        console.warn("Rate limited, will retry in 5 seconds");
+      }
     }
   };
+
   useEffect(() => {
-    loadReport(selectedDate);
-  }, [selectedDate]);
+    loadReport();
+  }, []);
+
+  useEffect(() => {
+    // Auto-refresh every 60 seconds, not 30 (reduced API pressure)
+    const interval = setInterval(() => {
+      loadReport();
+    }, 60000);
+
+    // Listen for settlement events from other pages with debounce
+    const handleSettlementEvent = () => {
+      console.log("Settlement detected, refreshing daily report");
+      // Clear pending timeout if any
+      if (loadTimeoutRef.current) {
+        clearTimeout(loadTimeoutRef.current);
+      }
+      // Debounce: only refresh after 1.5 seconds to avoid immediate rapid calls
+      loadTimeoutRef.current = setTimeout(() => {
+        loadReport();
+      }, 1500);
+    };
+
+    // Only add event listener if window is available
+    if (typeof window !== "undefined") {
+      window.addEventListener("settlementComplete", handleSettlementEvent);
+    }
+
+    return () => {
+      clearInterval(interval);
+      if (typeof window !== "undefined") {
+        window.removeEventListener("settlementComplete", handleSettlementEvent);
+      }
+      if (loadTimeoutRef.current) {
+        clearTimeout(loadTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleRefresh = () => {
+    loadReport();
+  };
 
   const handleDownloadPdf = async () => {
     try {
-      const blob = await downloadDailyReportPdf(selectedDate);
-      const url = window.URL.createObjectURL(new Blob([blob]));
+      const blob = await downloadDailyReportPdf(dayjs().format("YYYY-MM-DD"));
+      if (!blob) throw new Error("No PDF data received");
+      const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.setAttribute("download", `daily-report-${selectedDate}.pdf`);
+      link.setAttribute("download", `daily-report-${dayjs().format("YYYY-MM-DD")}.pdf`);
       document.body.appendChild(link);
       link.click();
       link.remove();
+      URL.revokeObjectURL(url);
     } catch (error) {
       console.error("Download error:", error);
       alert("Failed to download PDF");
@@ -80,14 +138,7 @@ const DailyReport = () => {
           Daily Financial Report
         </Typography>
         <Stack direction="row" gap={1} alignItems="center">
-          <TextField
-            type="date"
-            size="small"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            InputLabelProps={{ shrink: true }}
-          />
-          <Button variant="outlined" onClick={() => loadReport(selectedDate)}>
+          <Button variant="outlined" onClick={handleRefresh}>
             Refresh
           </Button>
           <Button variant="contained" color="primary" onClick={handleDownloadPdf}>
@@ -97,7 +148,7 @@ const DailyReport = () => {
       </Stack>
 
       <Typography sx={{ mb: 3 }}>
-        Date: {formatDate(selectedDate)}
+        Report Range: From {formatDateTimeRange(reportWindow.from)} To {formatDateTimeRange(reportWindow.to)}
       </Typography>
 
       <Grid container spacing={3}>

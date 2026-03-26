@@ -47,21 +47,21 @@ const UltrasoundList = () => {
     try {
       const data = await fetchUltrasoundPatients();
 
-      setRows(
-        data.map((item) => ({
-          id: item.id,
-          patient_name: item.patient_name,
-          age: item.age,
-          gender: item.gender,
-          mobile: item.mobile,
-          address: item.address,
-          scan_category: item.scan_category,
-          scan_name: item.scan_name,
-          referred_doctor: item.referred_doctor,
-          amount: item.amount,
-          upload_date: item.upload_date,
-        }))
-      );
+      const mappedRows = data.map((item, index) => ({
+        slno: index + 1,
+        id: item.id,
+        patient_name: item.patient_name,
+        age: item.age,
+        gender: item.gender,
+        mobile: item.mobile,
+        address: item.address,
+        scan_category: item.scan_category,
+        scan_name: item.scan_name,
+        referred_doctor: item.referred_doctor,
+        amount: item.amount,
+        upload_date: item.upload_date,
+      }));
+      setRows(mappedRows);
     } catch (err) {
       console.log(err);
       setError("Failed to load Ultrasound patients");
@@ -124,13 +124,15 @@ const UltrasoundList = () => {
   const handleDownloadInvoice = async (patientId) => {
     try {
       const blob = await downloadInvoicePDF(patientId);
-      const url = window.URL.createObjectURL(new Blob([blob]));
+      if (!blob) throw new Error("No PDF data received");
+      const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
       link.setAttribute("download", `invoice-${patientId}.pdf`);
       document.body.appendChild(link);
       link.click();
       link.remove();
+      URL.revokeObjectURL(url);
     } catch (error) {
       console.error("Download error:", error);
       alert("Failed to download invoice");
@@ -198,9 +200,17 @@ const UltrasoundList = () => {
 
   const columns = [
     {
+      field: "slno",
+      headerName: "SL No",
+      width: 60,
+      align: "center",
+      headerAlign: "center",
+    },
+    { field: "id", headerName: "ID", width: 70, align: "center", headerAlign: "center" },
+    {
       field: "upload_date",
-      headerName: "Date",
-      width: 175,
+      headerName: "Date & Time",
+      width: 180,
       renderCell: (params) => (
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <Typography sx={{ fontSize: "14px", color: "#666" }}>
@@ -219,40 +229,39 @@ const UltrasoundList = () => {
         </Box>
       ),
     },
-    { field: "id", headerName: "ID", width: 70 },
-    { field: "patient_name", headerName: "Patient", flex: 1.3, minWidth: 150 },
-    { field: "age", headerName: "Age", width: 60 },
-    { field: "gender", headerName: "Sex", width: 70 },
-    { field: "mobile", headerName: "Mobile", width: 110 },
+    { field: "patient_name", headerName: "Patient Name", flex: 1.2, minWidth: 140 },
+    { field: "age", headerName: "Age", width: 65, align: "center", headerAlign: "center" },
+    { field: "gender", headerName: "Gender", width: 80, align: "center", headerAlign: "center" },
+    { field: "mobile", headerName: "Mobile", width: 120 },
     {
       field: "address",
       headerName: "Address",
       flex: 1,
-      minWidth: 120,
+      minWidth: 130,
       renderCell: (params) => (
-        <Typography sx={{ fontSize: 13, whiteSpace: "normal", wordBreak: "break-word" }}>
+        <Typography sx={{ fontSize: 13, whiteSpace: "normal", wordBreak: "break-word", py: 1 }}>
           {params.value || "-"}
         </Typography>
       ),
     },
     {
       field: "scan_name",
-      headerName: "Scan",
+      headerName: "Scan Type",
       flex: 1,
-      minWidth: 120,
+      minWidth: 130,
       renderCell: (params) => (
-        <Typography sx={{ fontSize: 13, whiteSpace: "normal", wordBreak: "break-word" }}>
+        <Typography sx={{ fontSize: 13, whiteSpace: "normal", wordBreak: "break-word", py: 1 }}>
           {params.value || "-"}
         </Typography>
       ),
     },
     {
       field: "referred_doctor",
-      headerName: "Doctor",
+      headerName: "Referred Doctor",
       flex: 1,
-      minWidth: 120,
+      minWidth: 130,
       renderCell: (params) => (
-        <Typography sx={{ fontSize: 13, whiteSpace: "normal", wordBreak: "break-word" }}>
+        <Typography sx={{ fontSize: 13, whiteSpace: "normal", wordBreak: "break-word", py: 1 }}>
           {params.value || "-"}
         </Typography>
       ),
@@ -260,15 +269,19 @@ const UltrasoundList = () => {
     {
       field: "amount",
       headerName: "Amount",
-      width: 95,
+      width: 100,
+      align: "right",
+      headerAlign: "right",
       renderCell: (params) => `₹ ${params.value}`,
     },
     {
       field: "tools",
       headerName: "Actions",
-      width: 115,
+      width: 130,
       sortable: false,
       filterable: false,
+      align: "center",
+      headerAlign: "center",
       renderCell: (params) => (
         <Box sx={{ 
           display: "flex", 

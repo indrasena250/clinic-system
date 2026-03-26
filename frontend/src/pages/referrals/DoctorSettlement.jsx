@@ -45,8 +45,9 @@ const handleDownload = async () => {
     }
 
     const blob = await downloadSettlementPDF(doctor, fromDate, toDate);
+    if (!blob) throw new Error("No PDF data received");
 
-    const url = window.URL.createObjectURL(new Blob([blob]));
+    const url = URL.createObjectURL(blob);
 
     const link = document.createElement("a");
     link.href = url;
@@ -55,6 +56,7 @@ const handleDownload = async () => {
     document.body.appendChild(link);
     link.click();
     link.remove();
+    URL.revokeObjectURL(url);
 
   } catch (error) {
     console.error("Download error:", error);

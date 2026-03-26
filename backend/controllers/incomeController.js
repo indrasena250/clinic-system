@@ -1,13 +1,22 @@
 const db = require("../config/db");
+const dayjs = require("dayjs");
+const utc = require("dayjs/plugin/utc");
+const timezone = require("dayjs/plugin/timezone");
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 exports.addIncome = async (req, res) => {
   try {
     const clinicId = req.user?.clinic_id ?? 1;
     const { income_date, income_type, description, amount } = req.body;
+    
+    // Use IST timezone for created_at to match settlement timestamps
+    const istNow = dayjs().tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss");
 
     await db.query(
-      `INSERT INTO extra_income (clinic_id, income_date, income_type, description, amount, created_at) VALUES (?, ?, ?, ?, ?, NOW())`,
-      [clinicId, income_date, income_type, description, amount]
+      `INSERT INTO extra_income (clinic_id, income_date, income_type, description, amount, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+      [clinicId, income_date, income_type, description, amount, istNow]
     );
 
     res.json({ message: "Income added successfully" });
