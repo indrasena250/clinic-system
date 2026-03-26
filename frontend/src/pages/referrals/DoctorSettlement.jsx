@@ -10,6 +10,13 @@ import {
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
+import { formatDate } from "../../utils/date";
 import { fetchDoctorSettlement, fetchDoctors } from "../../api/patientApi";
 import { Button } from "@mui/material";
 import { downloadSettlementPDF } from "../../api/patientApi";
@@ -85,8 +92,8 @@ const handleDownload = async () => {
       const mapped = data.map((item, idx) => ({
         id: idx + 1,
         upload_date: item.upload_date,
-        date: dayjs(item.upload_date).format("DD-MM-YYYY"),
-        day: dayjs(item.upload_date).format("dddd"),
+        date: formatDate(item.upload_date),
+        day: dayjs.utc(item.upload_date).tz("Asia/Kolkata").format("dddd"),
         patient: item.patient_name,
         scan: item.scan_name,
         referral: Number(item.referral_amount) || 0,

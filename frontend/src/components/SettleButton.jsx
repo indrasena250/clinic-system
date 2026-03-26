@@ -14,19 +14,10 @@ import {
 import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
 import PrintIcon from "@mui/icons-material/Print";
 import { settle } from "../api/settlementApi";
+import { formatDateTime } from "../utils/date";
 
 const formatCurrency = (num) =>
   `₹ ${Number(num).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
-
-const formatDateTime = (str) => {
-  if (!str) return "-";
-  try {
-    const d = new Date(str);
-    return isNaN(d.getTime()) ? str : d.toLocaleString();
-  } catch {
-    return str;
-  }
-};
 
 const SettleButton = ({ onSettlementComplete }) => {
   const theme = useTheme();

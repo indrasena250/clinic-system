@@ -22,6 +22,13 @@ import ClearIcon from "@mui/icons-material/Clear";
 import { fetchUltrasoundPatients, updatePatient, downloadInvoicePDF } from "../../api/patientApi";
 import API from "../../api/axios";
 import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
+import { formatDate, formatTime, formatDateTime } from "../../utils/date";
 
 const UltrasoundList = () => {
   const [rows, setRows] = useState([]);
@@ -94,7 +101,7 @@ const UltrasoundList = () => {
         scan_name: editData.scan_name ?? existingRow.scan_name,
         referred_doctor: editData.referred_doctor ?? existingRow.referred_doctor,
         amount: editData.amount ?? existingRow.amount,
-        upload_date: dayjs(existingRow.upload_date).format("YYYY-MM-DD HH:mm:ss"),
+        upload_date: dayjs.utc(existingRow.upload_date).format("YYYY-MM-DD HH:mm:ss"),
       });
 
       setRows((prev) =>
@@ -148,7 +155,7 @@ const UltrasoundList = () => {
     const type = row.scan_name || "-";
     const amount = Number(row.amount ?? 0);
     const formattedAmount = Number.isFinite(amount) ? amount.toFixed(2) : String(row.amount ?? "-");
-    const dateStr = row.upload_date ? dayjs(row.upload_date).format("DD/MM/YYYY HH:mm:ss") : "-";
+    const dateStr = formatDateTime(row.upload_date);
 
     return [
       `${CENTER_NAME}`,
@@ -197,10 +204,10 @@ const UltrasoundList = () => {
       renderCell: (params) => (
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <Typography sx={{ fontSize: "14px", color: "#666" }}>
-            {dayjs(params.value).format("YYYY-MM-DD")}
+            {formatDate(params.value)}
           </Typography>
           <Chip
-            label={dayjs(params.value).format("HH:mm:ss")}
+            label={formatTime(params.value)}
             size="small"
             sx={{
               backgroundColor: "#2196F3",

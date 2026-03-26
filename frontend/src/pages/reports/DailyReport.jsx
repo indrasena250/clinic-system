@@ -3,6 +3,13 @@ import { Paper, Typography, Grid, Card, CardContent, Button, Stack, TextField } 
 
 import { getDailyReportSummary, downloadDailyReportPdf } from "../../api/reportApi";
 import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
+import { formatDate } from "../../utils/date";
 
 const DailyReport = () => {
 
@@ -15,7 +22,7 @@ const DailyReport = () => {
     net: 0
   });
 
-  const [selectedDate, setSelectedDate] = useState(dayjs().format("YYYY-MM-DD"));
+  const [selectedDate, setSelectedDate] = useState(dayjs().tz("Asia/Kolkata").format("YYYY-MM-DD"));
 
   const loadReport = async (date = selectedDate) => {
     try {
@@ -90,7 +97,7 @@ const DailyReport = () => {
       </Stack>
 
       <Typography sx={{ mb: 3 }}>
-        Date: {dayjs(selectedDate).format("DD MMM, YYYY")}
+        Date: {formatDate(selectedDate)}
       </Typography>
 
       <Grid container spacing={3}>

@@ -3,6 +3,12 @@ import { Paper, Typography, Grid, TextField, Button, MenuItem, Dialog, DialogTit
 import { DataGrid } from "@mui/x-data-grid";
 
 import { getIncome, addIncome, updateIncome } from "../../api/incomeApi";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 const ExtraIncome = () => {
 
@@ -16,7 +22,7 @@ const ExtraIncome = () => {
   amount: ""
  });
  
- const today = new Date().toISOString().split("T")[0];
+ const today = dayjs().tz("Asia/Kolkata").format("YYYY-MM-DD");
 
  const [form, setForm] = useState({
   income_date: today,

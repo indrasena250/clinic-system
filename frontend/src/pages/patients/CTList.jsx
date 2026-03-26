@@ -19,9 +19,16 @@ import EditIcon from "@mui/icons-material/Edit";
 import FileDownloadIcon from "@mui/icons-material/FileDownload";
 import SendIcon from "@mui/icons-material/Send";
 import ClearIcon from "@mui/icons-material/Clear";
-import dayjs from "dayjs";
 import { fetchCTPatients, updatePatient, downloadInvoicePDF } from "../../api/patientApi";
 import API from "../../api/axios";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
+import { formatDate, formatTime, formatDateTime } from "../../utils/date";
 
 const CTList = () => {
   const [rows, setRows] = useState([]);
@@ -97,7 +104,7 @@ const handleUpdate = async () => {
       scan_name: editData.scan_name ?? existingRow.scan_name,
       referred_doctor: editData.referred_doctor ?? existingRow.referred_doctor,
       amount: editData.amount ?? existingRow.amount,
-      upload_date: dayjs(existingRow.upload_date).format("YYYY-MM-DD HH:mm:ss"),
+      upload_date: dayjs.utc(existingRow.upload_date).format("YYYY-MM-DD HH:mm:ss"),
     });
 
     setRows(prev =>
@@ -154,7 +161,7 @@ const formatInvoiceMessage = (row, invoiceUrl) => {
   const type = row.scan_name || "-";
   const amount = Number(row.amount ?? 0);
   const formattedAmount = Number.isFinite(amount) ? amount.toFixed(2) : String(row.amount ?? "-");
-  const dateStr = row.upload_date ? dayjs(row.upload_date).format("DD/MM/YYYY HH:mm:ss") : "-";
+  const dateStr = formatDateTime(row.upload_date);
 
   // Put the URL on its own line with no extra characters after it
   // so WhatsApp reliably makes it clickable.
@@ -207,22 +214,25 @@ const handleSendWhatsApp = (row) => {
       field: "upload_date",
       headerName: "Date",
       width: 175,
-      renderCell: (params) =>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <Typography sx={{ fontSize: "14px", color: "#666" }}>
-            {dayjs(params.value).format("YYYY-MM-DD")}
-          </Typography>
-          <Chip
-            label={dayjs(params.value).format("HH:mm:ss")}
-            size="small"
-            sx={{
-              backgroundColor: "#2196F3",
-              color: "#fff",
-              fontWeight: "bold",
-              fontSize: "12px",
-            }}
-          />
-        </Box>
+      renderCell: (params) => {
+        return (
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <Typography sx={{ fontSize: "14px", color: "#666" }}>
+              {formatDate(params.value)}
+            </Typography>
+            <Chip
+              label={formatTime(params.value)}
+              size="small"
+              sx={{
+                backgroundColor: "#2196F3",
+                color: "#fff",
+                fontWeight: "bold",
+                fontSize: "12px",
+              }}
+            />
+          </Box>
+        );
+      },
     },
     { field: "id", headerName: "ID", width: 70 },
     { field: "patient_name", headerName: "Patient", flex: 1.3, minWidth: 150 },

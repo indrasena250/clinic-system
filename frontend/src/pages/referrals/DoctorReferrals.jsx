@@ -14,6 +14,13 @@ import {
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
+import { formatDateTime } from "../../utils/date";
 import { fetchAllPatients } from "../../api/patientApi";
 import { updateReferral } from "../../api/patientApi";
 
@@ -130,7 +137,7 @@ const DoctorReferral = () => {
       headerName: "Date",
       width: 180,
       renderCell: (params) =>
-        dayjs(params.row.upload_date).format("DD-MM-YYYY HH:mm:ss")
+        formatDateTime(params.row.upload_date)
     },
 
     { field: "patient_name", headerName: "Patient", flex: 1 },

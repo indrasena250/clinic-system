@@ -8,6 +8,13 @@ import {
  addExpense,
  updateExpense
 } from "../../api/financeApi";
+import { formatDate } from "../../utils/date";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 const DailyExpense = () => {
 
@@ -20,7 +27,7 @@ const DailyExpense = () => {
    amount: ""
  });
 
-const today = new Date().toISOString().split("T")[0];
+const today = dayjs().tz("Asia/Kolkata").format("YYYY-MM-DD");
 
 const [form, setForm] = useState({
   expense_date: today,
@@ -110,11 +117,7 @@ const loadExpenses = async () => {
      headerName: "Date", 
      width: 150,
      renderCell: (params) => {
-       const date = new Date(params.row.expense_date);
-       const day = String(date.getDate()).padStart(2, '0');
-       const month = String(date.getMonth() + 1).padStart(2, '0');
-       const year = date.getFullYear();
-       return `${day}/${month}/${year}`;
+       return formatDate(params.row.expense_date);
      }
    },
 
