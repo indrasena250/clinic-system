@@ -51,6 +51,11 @@ export const fetchSettlementHistory = async () => {
   return res.data;
 };
 
+export const fetchInvoiceScans = async (invoiceId) => {
+  const res = await API.get(`/patients/invoice/scans/${invoiceId}`);
+  return res.data;
+};
+
 export const downloadSettlementPeriodPDF = async (settlementId) => {
   const res = await API.get(`/patients/settlement-pdf/${settlementId}`, {
     responseType: "blob",
@@ -63,8 +68,8 @@ export const fetchTodaySummary = async () => {
   return res.data;
 };
 
-export const downloadInvoicePDF = async (patientId) => {
-  const res = await API.get(`/patients/invoice/pdf/${patientId}`, {
+export const downloadInvoicePDF = async (invoiceId) => {
+  const res = await API.get(`/patients/invoice/pdf/${invoiceId}`, {
     responseType: "blob",
   });
   return res.data;

@@ -1,7 +1,8 @@
 // src/pages/patients/AddPatient.jsx
 import { keyframes } from "@mui/system";
+import Confetti from "react-confetti";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Button,
   Grid,
@@ -14,10 +15,13 @@ import {
   Autocomplete,
   Box,
   Card,
-  CardContent
+  CardContent,
+  IconButton,
+  Dialog,
+  DialogContent
 } from "@mui/material";
 
-import { useForm, Controller } from "react-hook-form";
+import { useForm, Controller, useFieldArray, useWatch } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
 
@@ -29,18 +33,24 @@ import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 
 import { createPatient } from "../../api/patientApi";
 import { scanPrices, usgScans, ctScans } from "../../utils/scanPrices";
+import { playSound } from "../../utils/soundUtils";
+import AddIcon from "@mui/icons-material/Add";
+import DeleteIcon from "@mui/icons-material/Delete";
 
 const schema = yup.object().shape({
   patient_name: yup.string().required("Patient name required"),
   age: yup.number().typeError("Age must be number").required(),
   gender: yup.string().required(),
   mobile: yup.string().required(),
-  // Optional address field for billing and display
   address: yup.string().max(255, "Address is too long"),
-  scan_category: yup.string().required(),
-  scan_name: yup.string().required(),
-  referred_doctor: yup.string().required(),
-  amount: yup.number().typeError("Amount must be number").required(),
+  scans: yup.array().of(
+    yup.object().shape({
+      scan_category: yup.string().required("Scan type required"),
+      scan_name: yup.string().required("Scan name required"),
+      referred_doctor: yup.string().required("Doctor required"),
+      amount: yup.number().typeError("Amount must be number").required("Amount required")
+    })
+  ).min(1, "At least one scan is required"),
   upload_date: yup.date().required()
 });
 const fadeSlide = keyframes`
@@ -56,10 +66,24 @@ const fadeSlide = keyframes`
     transform: translateY(0);
   }
 `;
+const popupScale = keyframes`
+  0% {
+    opacity: 0;
+    transform: scale(0.7) translateY(-20px);
+  }
+  60% {
+    transform: scale(1.05) translateY(5px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+`;
 const AddPatient = () => {
-  const [scanOptions, setScanOptions] = useState([]);
   const [success, setSuccess] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
+  const [openPopup, setOpenPopup] = useState(false);
+  const [popupType, setPopupType] = useState(""); // success | error
   const [loading, setLoading] = useState(false);
   const [currentDateTime, setCurrentDateTime] = useState(dayjs());
 
@@ -69,14 +93,14 @@ const AddPatient = () => {
   });
 
   const {
-  control,
-  handleSubmit,
-  reset,
-  setValue,
-  watch,
-  clearErrors,   // ✅ ADD THIS
-  formState: { errors }
-} = useForm({
+    control,
+    handleSubmit,
+    reset,
+    setValue,
+    watch,
+    clearErrors,
+    formState: { errors }
+  } = useForm({
     resolver: yupResolver(schema),
     mode: "onSubmit",
     reValidateMode: "onSubmit",
@@ -86,13 +110,33 @@ const AddPatient = () => {
       gender: "",
       mobile: "",
       address: "",
-      scan_category: "",
-      scan_name: "",
-      referred_doctor: "",
-      amount: "",
+      scans: [{
+        scan_category: "",
+        scan_name: "",
+        referred_doctor: "",
+        amount: ""
+      }],
       upload_date: currentDateTime
     }
   });
+
+  const { fields, append, remove } = useFieldArray({
+  control,
+  name: "scans"
+});
+
+const watchedScans = useWatch({
+  control,
+  name: "scans",
+  defaultValue: []
+});
+
+const totalAmount = useMemo(() => {
+  return watchedScans.reduce((total, scan) => {
+    const amount = Number(scan?.amount);
+    return total + (isNaN(amount) ? 0 : amount);
+  }, 0);
+}, [JSON.stringify(watchedScans)]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -105,32 +149,15 @@ const AddPatient = () => {
     setValue('upload_date', currentDateTime);
   }, [currentDateTime, setValue]);
 
-  const handleCategoryChange = (value) => {
-    if (value === "CT") setScanOptions(ctScans);
-    else if (value === "Ultrasound") setScanOptions(usgScans);
-    else setScanOptions([]);
-
-    setValue("scan_name", "");
-    setValue("amount", "", { shouldValidate: true, shouldDirty: true });
-  };
-
-  const selectedScan = watch("scan_name");
-
-  useEffect(() => {
-    const price = scanPrices[selectedScan];
-    if (price != null) {
-      setValue("amount", price, { shouldValidate: true, shouldDirty: true });
-    }
-  }, [selectedScan, setValue]);
-  useEffect(() => {
-  if (success) {
+useEffect(() => {
+  if (openPopup) {
     const timer = setTimeout(() => {
-      setSuccess("");
-    }, 10000);
+      setOpenPopup(false);
+    }, 5000); // 5 seconds
 
     return () => clearTimeout(timer);
   }
-}, [success]);
+}, [openPopup]);
 
   const onSubmit = async (data) => {
     setLoading(true);
@@ -146,35 +173,47 @@ const AddPatient = () => {
 
       await createPatient({
         ...data,
-        upload_date: finalDateTime.format("YYYY-MM-DD HH:mm:ss")
+        upload_date: finalDateTime.format("YYYY-MM-DD HH:mm:ss"),
+        scans: data.scans // Send scans array
       });
 
-      if (!doctorOptions.includes(data.referred_doctor)) {
-        const updated = [...doctorOptions, data.referred_doctor];
+      // Update doctor options
+      const newDoctors = data.scans
+        .map(scan => scan.referred_doctor)
+        .filter(doctor => doctor && !doctorOptions.includes(doctor));
+
+      if (newDoctors.length > 0) {
+        const updated = [...doctorOptions, ...newDoctors];
         setDoctorOptions(updated);
         localStorage.setItem("doctors", JSON.stringify(updated));
       }
 
-      setSuccess("Patient added successfully");
+      setPopupType("success");
+      setOpenPopup(true);
+      playSound("success");
 
-      // ✅ RESET FORM
+      // Reset form
       reset({
         patient_name: "",
         age: "",
         gender: "",
         mobile: "",
         address: "",
-        scan_category: "",
-        scan_name: "",
-        referred_doctor: "",
-        amount: "",
+        scans: [{
+          scan_category: "",
+          scan_name: "",
+          referred_doctor: "",
+          amount: ""
+        }],
         upload_date: dayjs()
       });
 
-      // ✅ CLEAR ERRORS (MOST IMPORTANT FIX)
       clearErrors();
     } catch (error) {
       setErrorMsg(error?.response?.data?.message || "Failed to add patient");
+      setPopupType("error");
+      setOpenPopup(true);
+      playSound("error");
     } finally {
       setLoading(false);
     }
@@ -185,13 +224,14 @@ const AddPatient = () => {
       <Box
         sx={{
           background: "linear-gradient(135deg, #001a8f 0%, #764ba2 25%, #56ca39 50%, #7e08b4 75%, #05038d 100%)",
-          minHeight: "83vh",
-          pt: 1,
-          px: 1,
-          pb: .5,
+          minHeight: "50vh",
+          pt: 4,
+          px: 0,
+          pb: 4,
           display: "flex",
           alignItems: "flex-start",
-          justifyContent: "center"
+          justifyContent: "center",
+          borderRadius: 3
         }}
       >
         <Paper
@@ -207,67 +247,23 @@ const AddPatient = () => {
           }}
         >
           <Typography variant="h5" fontWeight="900" mb={0.25} sx={{ background: "linear-gradient(135deg, #0f0064 0%, #ff0101 100%)", backgroundClip: "text", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", fontSize: '1.5rem' }}>
-            Add Patient Scan
+            Add Patient Scans
           </Typography>
 
           <Typography variant="body2" color="text.secondary" mb={0.75} sx={{ fontSize: '0.85rem', fontWeight: 500 }}>
-            Enter patient details and scan information
+            Enter patient details and scan information (multiple scans supported)
           </Typography>
 
           <Divider sx={{ my: 1, opacity: 0.5 }} />
 
-          {success && (
-  <Box
-    sx={{
-      mb: 1,
-      p: 1.5,
-      borderRadius: 2,
-      display: "flex",
-      alignItems: "center",
-      gap: 1.5,
-      background: "linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%)",
-      border: "1px solid #28a745",
-      boxShadow: "0 4px 12px rgba(40,167,69,0.2)",
-      animation: `${fadeSlide} 0.4s ease`
-    }}
-  >
-    {/* ICON */}
-            <Box
-              sx={{
-                width: 32,
-                height: 32,
-                borderRadius: "50%",
-                background: "#28a745",
-                display: "flex",
-                alignItems: "flex-start",
-                justifyContent: "center",
-                color: "#fff",
-                fontWeight: "bold"
-              }}
-            >
-              ✓
-            </Box>
-
-
-            {/* TEXT */}
-            <Box>
-              <Typography sx={{ fontWeight: 700, color: "#155724", fontSize: "0.95rem" }}>
-                Patient Added Successfully
-              </Typography>
-              <Typography sx={{ fontSize: "0.8rem", color: "#155724" }}>
-                The patient record has been saved and is now available.
-              </Typography>
-            </Box>
-          </Box>
-        )}
-{errorMsg && <Alert severity="error" sx={{ mb: 0.75, py: 0.5, fontSize: '0.85rem' }}>{errorMsg}</Alert>}
+          
 
           <form onSubmit={handleSubmit(onSubmit)}>
             {/* PATIENT INFORMATION SECTION */}
             <Card
               sx={{
-                mb: 1.5,
-                boxShadow: "0 8px 32px rgba(102, 126, 234, 0.15)",
+                mb: 1,
+                boxShadow: "1 8px 32px rgba(102, 126, 234, 0.15)",
                 borderRadius: 2,
                 border: "1px solid rgba(102, 126, 234, 0.1)",
                 background:
@@ -276,8 +272,8 @@ const AddPatient = () => {
             >
               <CardContent
                 sx={{
-                  pt: 1,
-                  pb: 1.5
+                  pt: 0.5,
+                  pb: 1
                 }}
               >
                 {/* Title */}
@@ -287,9 +283,9 @@ const AddPatient = () => {
                   sx={{
                     display: "flex",
                     alignItems: "center",
-                    fontSize: "0.9rem",
+                    fontSize: "1.2rem",
                     color: "#0f0092",
-                    mb: 1.5   // 🔥 spacing fix
+                    mb: 1   // 🔥 spacing fix
                   }}
                 >
                   <Box
@@ -402,8 +398,8 @@ const AddPatient = () => {
             {/* SCAN DETAILS SECTION */}
             <Card
               sx={{
-                mb: 1.5,
-                boxShadow: "0 8px 32px rgba(255, 107, 107, 0.15)",
+                mb: 1,
+                boxShadow: "2px 8px 32px rgba(255, 107, 107, 0.15)",
                 borderRadius: 2,
                 border: "1px solid rgba(255, 107, 107, 0.1)",
                 background:
@@ -412,158 +408,224 @@ const AddPatient = () => {
             >
               <CardContent
                 sx={{
-                  pt: 1,
-                  pb: 1
+                  pt: 0.5,
+                  pb: 1,
+                  "&:last-child": { pb: 1 }
                 }}
               >
-                {/* Title */}
-                <Typography
-                  variant="subtitle2"
-                  fontWeight="bold"
-                  sx={{
-                    display: "flex",
-                    alignItems: "center",
-                    fontSize: "0.9rem",
-                    color: "#fd0a0a",
-                    mb: 1.5   // 🔥 spacing fix
-                  }}
-                >
-                  <Box
+                {/* Title with Add Button */}
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
+                  <Typography
+                    variant="subtitle2"
+                    fontWeight="bold"
                     sx={{
-                      width: 4,
-                      height: 18,
-                      background: "linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%)",
-                      borderRadius: 0.5,
-                      mr: 1
+                      display: "flex",
+                      alignItems: "center",
+                      fontSize: "1.2rem",
+                      color: "#02046e"
                     }}
-                  />
-                  Scan Details
-                </Typography>
-
-                {/* FLEX ROW */}
-                <Box
-                  sx={{
-                    display: "flex",
-                    gap: 2,
-                    width: "100%",
-                    flexWrap: "wrap"
-                  }}
-                >
-
-                  {/* Scan Type */}
-                  <Box sx={{ flex: 3, minWidth: 220 }}>
-                    <Controller
-                      name="scan_category"
-                      control={control}
-                      render={({ field }) => (
-                        <TextField
-                          {...field}
-                          select
-                          label="Scan Type"
-                          fullWidth
-                          size="small"
-                          error={!!errors.scan_category}
-                          helperText={errors.scan_category?.message}
-                          onChange={(e) => {
-                            field.onChange(e);
-                            handleCategoryChange(e.target.value);
-                          }}
-                        >
-                          <MenuItem value="">Select</MenuItem>
-                          <MenuItem value="CT">CT Scan</MenuItem>
-                          <MenuItem value="Ultrasound">Ultrasound</MenuItem>
-                        </TextField>
-                      )}
+                  >
+                    <Box
+                      sx={{
+                        width: 4,
+                        height: 18,
+                        background: "linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%)",
+                        borderRadius: 0.5,
+                        mr: 1
+                      }}
                     />
-                  </Box>
-
-                  {/* Scan Name */}
-                  <Box sx={{ flex: 4, minWidth: 260 }}>
-                    <Controller
-                      name="scan_name"
-                      control={control}
-                      render={({ field }) => (
-                        <Autocomplete
-                          freeSolo
-                          options={scanOptions}
-                          value={field.value || ""}
-                          onChange={(e, value) => field.onChange(value)}
-                          onInputChange={(e, value) => field.onChange(value)}
-                          sx={{ width: "100%" }}
-                          renderInput={(params) => (
-                            <TextField
-                              {...params}
-                              label="Scan Name"
-                              fullWidth
-                              size="small"
-                              error={!!errors.scan_name}
-                              helperText={errors.scan_name?.message}
-                            />
-                          )}
-                        />
-                      )}
-                    />
-                  </Box>
-
-                  {/* Referring Doctor */}
-                  <Box sx={{ flex: 3, minWidth: 220 }}>
-                    <Controller
-                      name="referred_doctor"
-                      control={control}
-                      render={({ field }) => (
-                        <Autocomplete
-                          freeSolo
-                          options={doctorOptions}
-                          value={field.value || ""}
-                          onChange={(e, value) => field.onChange(value)}
-                          onInputChange={(e, value) => field.onChange(value)}
-                          sx={{ width: "100%" }}
-                          renderInput={(params) => (
-                            <TextField
-                              {...params}
-                              label="Referring Doctor"
-                              fullWidth
-                              size="small"
-                              error={!!errors.referred_doctor}
-                              helperText={errors.referred_doctor?.message}
-                            />
-                          )}
-                        />
-                      )}
-                    />
-                  </Box>
-
+                    Scan Details ({fields.length} scan{fields.length !== 1 ? 's' : ''})
+                  </Typography>
+                  <Button
+                    startIcon={<AddIcon />}
+                    onClick={() => {
+                      const firstScanDoctor = watch('scans.0.referred_doctor');
+                      append({
+                        scan_category: "",
+                        scan_name: "",
+                        referred_doctor: firstScanDoctor || "",
+                        amount: ""
+                      });
+                    }}
+                    size="small"
+                    variant="outlined"
+                    sx={{ fontSize: '0.75rem' }}
+                  >
+                    Add Scan
+                  </Button>
                 </Box>
+
+                {/* Dynamic Scan Forms */}
+                {fields.map((field, index) => (
+                  <Card
+                    key={field.id}
+                    sx={{
+                      mb: 2,
+                      p: 1.5,
+                      background: "linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(245,247,255,0.9) 100%)",
+                      border: "1px solid rgba(255, 107, 107, 0.2)",
+                      position: 'relative'
+                    }}
+                  >
+                    {/* Remove button */}
+                    {fields.length > 1 && (
+                      <IconButton
+                        onClick={() => remove(index)}
+                        sx={{
+                          position: 'absolute',
+                          top: 4,
+                          right: 4,
+                          color: '#ff6b6b',
+                          '&:hover': { backgroundColor: 'rgba(255, 107, 107, 0.1)' }
+                        }}
+                        size="small"
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    )}
+
+                    <Typography variant="subtitle2" sx={{ mb: 1, color: '#ff8800', fontWeight: 'bold' }}>
+                      Scan {index + 1}
+                    </Typography>
+
+                    <Grid container spacing={2}>
+                      {/* Scan Type */}
+                      <Box sx={{ flex: 1.5, minWidth: 150 }}>
+                        <Controller
+                          name={`scans.${index}.scan_category`}
+                          control={control}
+                          render={({ field }) => (
+                            <TextField
+                              {...field}
+                              select
+                              label="Scan Type"
+                              fullWidth
+                              size="small"
+                              error={!!errors.scans?.[index]?.scan_category}
+                              helperText={errors.scans?.[index]?.scan_category?.message}
+                            >
+                              <MenuItem value="">Select</MenuItem>
+                              <MenuItem value="CT">CT Scan</MenuItem>
+                              <MenuItem value="Ultrasound">Ultrasound</MenuItem>
+                            </TextField>
+                          )}
+                        />
+                      </Box>
+
+                      {/* Scan Name */}
+                      <Box sx={{ flex: 2, minWidth: 200 }}>
+                        <Controller
+                          name={`scans.${index}.scan_name`}
+                          control={control}
+                          render={({ field }) => {
+                            const currentCategory = watch(`scans.${index}.scan_category`);
+                            const scanOptions = currentCategory === "CT" ? ctScans : currentCategory === "Ultrasound" ? usgScans : [];
+                            return (
+                              <Autocomplete
+                                freeSolo
+                                options={scanOptions}
+                                value={field.value || ""}
+                                onChange={(e, value) => {
+                                  field.onChange(value);
+                                  // Auto-fill amount based on scan name
+                                  const price = scanPrices[value];
+                                  if (price != null) {
+                                    setValue(`scans.${index}.amount`, price, {
+                                    shouldDirty: true,
+                                    shouldValidate: true,
+                                    shouldTouch: true
+                                  });
+                                  }
+                                }}
+                                onInputChange={(e, value) => field.onChange(value)}
+                                renderInput={(params) => (
+                                  <TextField
+                                    {...params}
+                                    label="Scan Name"
+                                    fullWidth
+                                    size="small"
+                                    error={!!errors.scans?.[index]?.scan_name}
+                                    helperText={errors.scans?.[index]?.scan_name?.message}
+                                  />
+                                )}
+                              />
+                            );
+                          }}
+                        />
+                      </Box>
+
+                      {/* Referring Doctor */}
+                      <Box sx={{ flex: 2, minWidth: 180 }}>
+                        <Controller
+                          name={`scans.${index}.referred_doctor`}
+                          control={control}
+                          render={({ field }) => (
+                            <Autocomplete
+                              freeSolo
+                              options={doctorOptions}
+                              value={field.value || ""}
+                              onChange={(e, value) => field.onChange(value || "")}
+                              onInputChange={(e, value, reason) => {
+                                if (reason === 'input') {
+                                  field.onChange(value);
+                                }
+                              }}
+                              renderInput={(params) => (
+                                <TextField
+                                  {...params}
+                                  label="Referring Doctor"
+                                  fullWidth
+                                  size="small"
+                                  error={!!errors.scans?.[index]?.referred_doctor}
+                                  helperText={errors.scans?.[index]?.referred_doctor?.message}
+                                />
+                              )}
+                            />
+                          )}
+                        />
+                      </Box>
+
+                      {/* Amount */}
+                      <Grid item xs={12}>
+                        <Controller
+                          name={`scans.${index}.amount`}
+                          control={control}
+                          render={({ field }) => (
+                            <TextField
+                              value={field.value || ""}
+                              onChange={(e) => {
+                                field.onChange(e.target.value);
+                              }}
+                              label="Amount (₹)"
+                              type="number"
+                              fullWidth
+                              size="small"
+                              error={!!errors.scans?.[index]?.amount}
+                              helperText={errors.scans?.[index]?.amount?.message}
+                            />
+                          )}
+                        />
+                      </Grid>
+
+
+                    </Grid>
+                  </Card>
+                ))}
+
+                
               </CardContent>
             </Card>
+
+
             {/* BILLING SECTION */}
             <Card sx={{ mb: 1, boxShadow: "0 8px 32px rgba(76, 175, 80, 0.15)", borderRadius: 2, border: "1px solid rgba(76, 175, 80, 0.1)", background: "linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(245,247,255,0.95) 100%)" }}>
-              <CardContent sx={{ pt: 1, pb: 1, "&:last-child": { pb: 1.5 } }}>
-                <Typography variant="subtitle2" fontWeight="bold" mb={1} sx={{ display: 'flex', alignItems: 'center', fontSize: '0.9rem', color: '#08860c' }}>
-                  <Box sx={{ width: 4, height: 18, background: "linear-gradient(135deg, #008304 0%, #008307 100%)", borderRadius: 0.5, mr: 1 }} />
-                  Billing
+              <CardContent sx={{ pt: 1, pb: 1, "&:last-child": { pb: 1 } }}>
+                <Typography variant="subtitle2" fontWeight="bold" mb={1} sx={{ display: 'flex', alignItems: 'center', fontSize: '1.2 rem', color: '#08860c' }}>
+                  <Box sx={{ width: 5, height: 18, background: "linear-gradient(135deg, #008304 0%, #008307 100%)", borderRadius: 0.5, mr: 1 }} />
+                  Billing & Upload Details
                 </Typography>
 
-                <Grid container spacing={1}>
-                  <Grid item xs={12} sm={6} md={3}>
-                    <Controller
-                      name="amount"
-                      control={control}
-                      render={({ field }) => (
-                        <TextField
-                          {...field}
-                          label="Amount (₹)"
-                          type="number"
-                          fullWidth
-                          variant="outlined"
-                          error={!!errors.amount}
-                          helperText={errors.amount?.message}
-                          size="small"
-                        />
-                      )}
-                    />
-                  </Grid>
-
+                <Grid container spacing={2}>
                   <Grid item xs={12} sm={6} md={3}>
                     <Controller
                       name="upload_date"
@@ -580,8 +642,8 @@ const AddPatient = () => {
                       )}
                     />
                   </Grid>
-
-                  <Grid item xs={12} md={6}>
+                    
+                  <Grid item xs={12} sm={6} md={3}>
                     <Controller
                       name="address"
                       control={control}
@@ -591,7 +653,7 @@ const AddPatient = () => {
                           label="Address"
                           fullWidth
                           multiline
-                          minRows={2}
+                          minRows={1}
                           size="small"
                           variant="outlined"
                           error={!!errors.address}
@@ -600,13 +662,39 @@ const AddPatient = () => {
                       )}
                     />
                   </Grid>
+                
+                {/* Total Amount Display */}
+                <Grid item xs={12} sm={6} md={3}>
+                <Box sx={{ mt: 0, p: 0, backgroundColor: 'rgba(117, 216, 255, 0.18)', borderRadius: 1 }}>
+                    <Typography
+                      component="span"
+                      sx={{
+                        fontWeight: '900',
+                        color: '#000',
+                        fontSize: '1.8rem'
+                      }}
+                    >
+                      Total Amount:{" "}
+                      <Box
+                        component="span"
+                        sx={{
+                          color: '#d32f2f',
+                          fontWeight: 800,
+                          fontSize: '1.8rem',
+                          alignment: 'right'
+                        }}
+                      >
+                        ₹{totalAmount.toFixed(2)}
+                      </Box>
+                    </Typography>
+                </Box>
                 </Grid>
-              </CardContent>
-            </Card>
+                
+              
 
             {/* SUBMIT BUTTON */}
-            <Grid container spacing={1}>
-              <Grid item xs={12}>
+           
+              <Grid item xs={12} sm={6} md={4}>
                 <Button
                   type="submit"
                   fullWidth
@@ -616,7 +704,7 @@ const AddPatient = () => {
                   sx={{
                     height: 42,
                     fontWeight: "900",
-                    fontSize: 13,
+                    fontSize: 25,
                     background: "linear-gradient(135deg, #042cdd 0%, #2b00a1 50%, #210ce6 100%)",
                     borderRadius: 2,
                     boxShadow: "0 8px 24px rgb(255, 255, 255)",
@@ -634,11 +722,78 @@ const AddPatient = () => {
                 >
                   {loading ? "Adding Patient..." : "ADD PATIENT"}
                 </Button>
-              </Grid>
+              
+              
             </Grid>
+            </Grid>
+            </CardContent>
+            </Card>
           </form>
         </Paper>
       </Box>
+      {openPopup && popupType === "success" && (
+  <Confetti
+    width={window.innerWidth}
+    height={window.innerHeight}
+    numberOfPieces={900}
+    recycle={false}
+  />
+)}
+      <Dialog
+  open={openPopup}
+  onClose={() => setOpenPopup(false)}
+  PaperProps={{
+    sx: {
+      borderRadius: 4,
+      px: 4,
+      py: 3,
+      textAlign: "center",
+      minWidth: 320,
+      animation: `${popupScale} 0.4s ease`
+    }
+  }}
+>
+  <DialogContent>
+    <Box display="flex" flexDirection="column" alignItems="center" gap={2}>
+
+      {/* ICON */}
+      <Box
+        sx={{
+          width: 70,
+          height: 70,
+          borderRadius: "50%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background:
+            popupType === "success"
+              ? "linear-gradient(135deg, #28a745, #4caf50)"
+              : "linear-gradient(135deg, #dc3545, #ff6b6b)",
+          color: "#fff",
+          fontSize: 30,
+          boxShadow: "0 8px 25px rgba(0,0,0,0.2)"
+        }}
+      >
+        {popupType === "success" ? "✓" : "!"}
+      </Box>
+
+      {/* TITLE */}
+      <Typography sx={{ fontWeight: 800, fontSize: "1.2rem" }}>
+        {popupType === "success"
+          ? "Patient Added Successfully"
+          : "Error"}
+      </Typography>
+
+      {/* MESSAGE */}
+      <Typography sx={{ fontSize: "0.9rem", color: "#555" }}>
+        {popupType === "success"
+          ? "Patient data saved successfully."
+          : errorMsg}
+      </Typography>
+
+    </Box>
+  </DialogContent>
+</Dialog>
     </LocalizationProvider>
   );
 };

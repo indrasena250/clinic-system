@@ -100,7 +100,7 @@ async function drawSignature(doc, pageWidth, margin) {
 }
 
 /* =========================================
-   ADD NEW PATIENT
+   ADD NEW PATIENT WITH MULTIPLE SCANS
 ========================================= */
 router.post("/add", protect, authorize("admin", "staff"), async (req, res) => {
   try {
@@ -112,66 +112,85 @@ router.post("/add", protect, authorize("admin", "staff"), async (req, res) => {
       gender,
       mobile,
       address,
-      scan_category,
-      scan_name,
-      referred_doctor,
-      amount,
-      referral_amount
+      scans // Array of scan objects: [{scan_category, scan_name, referred_doctor, amount, referral_amount}, ...]
     } = req.body;
 
-    // If upload_date is just a date (YYYY-MM-DD), append current time
-    let finalDate = upload_date;
-    if (upload_date && upload_date.length === 10) {
-      finalDate = dayjs(upload_date).format("YYYY-MM-DD") + " " + dayjs().format("HH:mm:ss");
+    // Validate required fields
+    if (!patient_name || !mobile || !scans || !Array.isArray(scans) || scans.length === 0) {
+      return res.status(400).json({
+        message: "Patient name, mobile, and at least one scan are required"
+      });
     }
-    
-    // Use IST timezone for created_at to match settlement timestamps
+
+    // Use IST timezone for created_at
     const istNow = dayjs().tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss");
 
-    const sql = `
-      INSERT INTO patients
-      (clinic_id, upload_date, patient_name, age, gender, mobile, address, scan_category, scan_name, referred_doctor, amount, referral_amount, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
+    // Start transaction
+    const connection = await db.getConnection();
+    await connection.beginTransaction();
 
-    const [result] = await db.query(sql, [
+    try {
+      // Insert each scan as a separate patient record
+ const invoiceId = Date.now(); // one invoice for all scans
+
+const patientIds = [];
+
+for (const scan of scans) {
+
+  let finalDate = upload_date || dayjs().format("YYYY-MM-DD HH:mm:ss");
+
+  if (finalDate && finalDate.length === 10) {
+    finalDate =
+      dayjs(finalDate).format("YYYY-MM-DD") +
+      " " +
+      dayjs().format("HH:mm:ss");
+  }
+
+  const [result] = await connection.query(
+    `INSERT INTO patients
+    (clinic_id, patient_name, age, gender, mobile, address,
+     scan_category, scan_name, referred_doctor, amount,
+     upload_date, created_at, invoice_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
       clinicId,
-      finalDate,
       patient_name,
       age,
       gender,
       mobile,
       address || null,
-      scan_category,
-      scan_name,
-      referred_doctor,
-      amount,
-      referral_amount || 0,
-      istNow
-    ]);
+      scan.scan_category,
+      scan.scan_name,
+      scan.referred_doctor,
+      scan.amount,
+      finalDate,
+      istNow,
+      invoiceId
+    ]
+  );
 
-    const patientId = result.insertId;
+  patientIds.push(result.insertId);
+}
+      await connection.commit();
 
-    if (referral_amount && referral_amount > 0) {
-      const referralSql = `
-        INSERT INTO doctor_referrals (clinic_id, patient_id, doctor_name, referral_amount, payment_status)
-        VALUES (?, ?, ?, ?, 'Balance')
-      `;
-      await db.query(referralSql, [clinicId, patientId, referred_doctor, referral_amount]);
+      res.status(201).json({
+        message: `Patient added successfully with ${scans.length} scan(s)`,
+        patientIds
+      });
+
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
     }
 
-    res.status(201).json({
-      message: "Patient added successfully"
-    });
-
   } catch (error) {
-
-    console.error(error);
-
+    console.error('Error adding patient:', error);
     res.status(500).json({
-      message: "Error adding patient"
+      message: "Error adding patient",
+      error: error.message
     });
-
   }
 });
 /* =========================================
@@ -181,7 +200,7 @@ router.get("/all", protect, authorize("admin", "staff"), async (req, res) => {
   try {
     const clinicId = req.user?.clinic_id ?? 1;
     const [rows] = await pool.query(
-      `SELECT id, patient_name, scan_name, upload_date, referred_doctor, amount, referral_amount, referral_status
+      `SELECT id, patient_name, scan_name, upload_date, referred_doctor, amount, referral_amount, referral_status,invoice_id 
        FROM patients WHERE clinic_id = ? ORDER BY upload_date DESC`,
       [clinicId]
     );
@@ -579,9 +598,10 @@ async (req, res) => {
       const startX = margin;
       const rowHeight = 25;
 
-      const colWidths = [80, 80, 140, 110, 85];
+      const colWidths = [50, 80, 80, 130, 100, 85];
 
       const headers = [
+        "SL NO",
         "Date",
         "Day",
         "Patient",
@@ -615,6 +635,7 @@ async (req, res) => {
       /* ================= ROWS ================= */
 
       let totalReferral = 0;
+      let slNo = 1;
 
       rows.forEach((row) => {
 
@@ -632,12 +653,15 @@ async (req, res) => {
         totalReferral += referral;
 
         const rowData = [
+          slNo.toString(),
           date,
           day,
           row.patient_name,
           row.scan_name,
           referral.toFixed(2)
         ];
+
+        slNo++;
 
         let x = startX;
 
@@ -1838,18 +1862,47 @@ router.delete("/signature/:id", protect, authorize("admin"), async (req, res) =>
 });
 
 /* =========================================
-   GENERATE INVOICE PDF
+   GET ALL SCANS FOR INVOICE (for WhatsApp)
 ========================================= */
-router.get("/invoice/pdf/:id", protect, authorize("admin", "staff"), async (req, res) => {
+router.get("/invoice/scans/:invoiceId", protect, authorize("admin", "staff"), async (req, res) => {
   try {
     const clinicId = req.user?.clinic_id ?? 1;
+    const invoiceId = req.params.invoiceId;
+    console.log("Fetching scans for invoice:", invoiceId, "clinic:", clinicId);
+
     const [rows] = await db.query(
-      "SELECT * FROM patients WHERE id = ? AND clinic_id = ?",
-      [req.params.id, clinicId]
+      "SELECT * FROM patients WHERE invoice_id = ? AND clinic_id = ? ORDER BY upload_date ASC, id ASC",
+      [invoiceId, clinicId]
+    );
+
+    console.log("Found scans:", rows.length);
+    if (!rows.length) {
+      return res.status(404).json({ message: "No scans found for this invoice" });
+    }
+
+    res.json(rows);
+  } catch (error) {
+    console.error("Get invoice scans error:", error);
+    res.status(500).json({ message: "Failed to fetch invoice scans" });
+  }
+});
+
+/* =========================================
+   GENERATE INVOICE PDF
+========================================= */
+router.get("/invoice/pdf/:invoiceId", protect, authorize("admin", "staff"), async (req, res) => {
+  try {
+    const clinicId = req.user?.clinic_id ?? 1;
+    const invoiceId = req.params.invoiceId;
+    console.log("Generating invoice PDF for:", invoiceId, "clinic:", clinicId);
+
+    const [rows] = await db.query(
+      "SELECT * FROM patients WHERE invoice_id = ? AND clinic_id = ? ORDER BY upload_date ASC, id ASC",
+      [invoiceId, clinicId]
     );
     if (!rows.length) return res.status(404).json({ message: "Patient not found" });
 
-    const data = rows[0];
+    const patientData = rows[0];
 
     const PDFDocument = require("pdfkit");
     const dayjs = require("dayjs");
@@ -1859,7 +1912,7 @@ router.get("/invoice/pdf/:id", protect, authorize("admin", "staff"), async (req,
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename=invoice-${data.id}.pdf`
+      `attachment; filename=invoice-${patientData.invoice_id}.pdf`
     );
 
     doc.pipe(res);
@@ -1868,14 +1921,15 @@ router.get("/invoice/pdf/:id", protect, authorize("admin", "staff"), async (req,
     const margin = 50;
     const rightX = pageWidth - margin;
 
-    const invoiceNo = String(data.id).padStart(6, "0");
+    const invoiceNo = String(patientData.invoice_id).padStart(6, "0");
 
-    // ===== CLEAN AMOUNT (SAME AS REPORT STYLE) =====
-    const amount = Number(
-      String(data.amount).replace(/[^\d.]/g, "")
-    ) || 0;
-
-    const formattedAmount = amount.toFixed(2);
+    // ===== CALCULATE TOTAL AMOUNT FROM ALL SCANS =====
+    let totalAmount = 0;
+    rows.forEach((row) => {
+      const amount = Number(String(row.amount).replace(/[^\d.]/g, "")) || 0;
+      totalAmount += amount;
+    });
+    const formattedTotal = totalAmount.toFixed(2);
 
     // ================= HEADER =================
     doc.font("Helvetica-Bold").fontSize(18);
@@ -1892,7 +1946,7 @@ router.get("/invoice/pdf/:id", protect, authorize("admin", "staff"), async (req,
     doc.font("Helvetica").fontSize(11);
     doc.text(`Invoice No: ${invoiceNo}`, rightX - 150, 75, { width: 150, align: "right" });
     doc.text(
-      `Date: ${dayjs(data.upload_date).format("DD/MM/YYYY")}`,
+      `Date: ${dayjs(patientData.upload_date).format("DD/MM/YYYY")}`,
       rightX - 150,
       90,
       { width: 150, align: "right" }
@@ -1906,62 +1960,65 @@ router.get("/invoice/pdf/:id", protect, authorize("admin", "staff"), async (req,
 
     doc.font("Helvetica-Bold").fontSize(13);
 
-    doc.text(`Patient Name: ${data.patient_name}`, margin, infoY);
-    doc.text(`Age: ${data.age}`, margin, infoY + 25);
-    doc.text(`Gender: ${data.gender}`, margin, infoY + 50);
+    doc.text(`Patient Name: ${patientData.patient_name}`, margin, infoY);
+    doc.text(`Age: ${patientData.age}`, margin, infoY + 25);
+    doc.text(`Gender: ${patientData.gender}`, margin, infoY + 50);
 
     // ================= TABLE =================
     const tableTop = 240;
 
     const col1 = margin;
-    const col2 = 220;
-    const col3 = rightX - 60;
+    const col2 = margin + 50;
+    const col3 = 250;
+    const col4 = rightX - 60;
 
     doc.font("Helvetica-Bold").fontSize(12);
 
-    doc.text("Date", col1, tableTop);
-    doc.text("Scan", col2, tableTop);
-    doc.text("Amount", col3, tableTop, { width: 60, align: "center" });
+    doc.text("SL No", col1, tableTop);
+    doc.text("Date", col2, tableTop);
+    doc.text("Scan", col3, tableTop);
+    doc.text("Amount", col4, tableTop, { width: 60, align: "center" });
 
     doc.moveTo(margin, tableTop + 18).lineTo(rightX, tableTop + 18).stroke();
 
-    // ROW
-    const rowY = tableTop + 30;
-
+    // ================= TABLE ROWS (ALL SCANS) =================
+    let currentY = tableTop + 30;
     doc.font("Helvetica").fontSize(12);
 
-    doc.text(dayjs(data.upload_date).format("DD-MM-YYYY"), col1, rowY);
-    doc.text(data.scan_name || "-", col2, rowY);
+    rows.forEach((row, index) => {
+      const amount = Number(String(row.amount).replace(/[^\d.]/g, "")) || 0;
+      const formattedAmount = amount.toFixed(2);
+      const slNo = index + 1;
 
-    doc.text(
-  `Rs. ${formattedAmount}`,
-  col3,
-  rowY,
-  {
-    width: 100,        // ✅ increase width
-    align: "left",
-    lineBreak: false   // ✅ force single line
-  }
-);
+      doc.text(String(slNo), col1, currentY);
+      doc.text(dayjs(row.upload_date).format("DD-MM-YYYY"), col2, currentY);
+      doc.text(row.scan_name || "-", col3, currentY);
+      doc.text(`Rs. ${formattedAmount}`, col4, currentY, { 
+        width: 100, 
+        align: "left", 
+        lineBreak: false 
+      });
 
-    doc.moveTo(margin, rowY + 25).lineTo(rightX, rowY + 25).stroke();
+      currentY += 25;
+    });
+
+    doc.moveTo(margin, currentY).lineTo(rightX, currentY).stroke();
 
     // ================= TOTAL =================
-    const totalY = rowY + 50;
+    const totalY = currentY + 20;
 
     doc.font("Helvetica-Bold").fontSize(14);
+    doc.text(
+      `Total Amount: Rs. ${formattedTotal}`,
+      col2,
+      totalY,
+      {
+        width: rightX - col2,
+        align: "right",
+        lineBreak: false
+      }
+    );
 
-        // Combine in ONE text call (KEY FIX)
-        doc.text(
-          `Total Amount: Rs. ${formattedAmount}`,
-          col2,
-          totalY,
-          {
-            width: rightX - col2,
-            align: "right",
-            lineBreak: false
-          }
-        );
     // ================= THANK YOU =================
     doc.font("Helvetica-Bold").fontSize(12);
 
@@ -1980,18 +2037,18 @@ router.get("/invoice/pdf/:id", protect, authorize("admin", "staff"), async (req,
 /* =========================================
    PUBLIC INVOICE PDF (No Login)
 ========================================= */
-router.get("/invoice/public/:id", async (req, res) => {
+router.get("/invoice/public/:invoiceId", async (req, res) => {
   try {
     const [rows] = await db.query(
-      "SELECT * FROM patients WHERE id = ?",
-      [req.params.id]
+      "SELECT * FROM patients WHERE invoice_id = ? ORDER BY upload_date ASC, id ASC",
+      [req.params.invoiceId]
     );
 
     if (!rows.length) {
       return res.status(404).json({ message: "Patient not found" });
     }
 
-    const data = rows[0];
+    const patientData = rows[0];
 
     const PDFDocument = require("pdfkit");
     const dayjs = require("dayjs");
@@ -2001,7 +2058,7 @@ router.get("/invoice/public/:id", async (req, res) => {
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename=invoice-${data.id}.pdf`
+      `attachment; filename=invoice-${patientData.invoice_id}.pdf`
     );
 
     doc.pipe(res);
@@ -2010,13 +2067,15 @@ router.get("/invoice/public/:id", async (req, res) => {
     const margin = 50;
     const rightX = pageWidth - margin;
 
-    const invoiceNo = String(data.id).padStart(6, "0");
+    const invoiceNo = String(patientData.invoice_id).padStart(6, "0");
 
-    const amount = Number(
-      String(data.amount).replace(/[^\d.]/g, "")
-    ) || 0;
-
-    const formattedAmount = amount.toFixed(2);
+    // ===== CALCULATE TOTAL AMOUNT FROM ALL SCANS =====
+    let totalAmount = 0;
+    rows.forEach((row) => {
+      const amount = Number(String(row.amount).replace(/[^\d.]/g, "")) || 0;
+      totalAmount += amount;
+    });
+    const formattedTotal = totalAmount.toFixed(2);
 
     doc.font("Helvetica-Bold").fontSize(18);
     doc.text("SRIDEVI DIAGNOSTIC CENTER", margin, 50);
@@ -2031,7 +2090,7 @@ router.get("/invoice/public/:id", async (req, res) => {
     doc.font("Helvetica").fontSize(11);
     doc.text(`Invoice No: ${invoiceNo}`, rightX - 150, 75, { width: 150, align: "right" });
     doc.text(
-      `Date: ${dayjs(data.upload_date).format("DD/MM/YYYY")}`,
+      `Date: ${dayjs(patientData.upload_date).format("DD/MM/YYYY")}`,
       rightX - 150,
       90,
       { width: 150, align: "right" }
@@ -2041,33 +2100,50 @@ router.get("/invoice/public/:id", async (req, res) => {
 
     const infoY = 140;
     doc.font("Helvetica-Bold").fontSize(13);
-    doc.text(`Patient Name: ${data.patient_name}`, margin, infoY);
-    doc.text(`Age: ${data.age}`, margin, infoY + 25);
-    doc.text(`Gender: ${data.gender}`, margin, infoY + 50);
+    doc.text(`Patient Name: ${patientData.patient_name}`, margin, infoY);
+    doc.text(`Age: ${patientData.age}`, margin, infoY + 25);
+    doc.text(`Gender: ${patientData.gender}`, margin, infoY + 50);
 
     const tableTop = 240;
     const col1 = margin;
-    const col2 = 220;
-    const col3 = rightX - 60;
+    const col2 = margin + 50;
+    const col3 = 250;
+    const col4 = rightX - 60;
 
     doc.font("Helvetica-Bold").fontSize(12);
-    doc.text("Date", col1, tableTop);
-    doc.text("Scan", col2, tableTop);
-    doc.text("Amount", col3, tableTop, { width: 60, align: "center" });
+    doc.text("SL No", col1, tableTop);
+    doc.text("Date", col2, tableTop);
+    doc.text("Scan", col3, tableTop);
+    doc.text("Amount", col4, tableTop, { width: 60, align: "center" });
 
     doc.moveTo(margin, tableTop + 18).lineTo(rightX, tableTop + 18).stroke();
 
-    const rowY = tableTop + 30;
+    // ================= TABLE ROWS (ALL SCANS) =================
+    let currentY = tableTop + 30;
     doc.font("Helvetica").fontSize(12);
-    doc.text(dayjs(data.upload_date).format("DD-MM-YYYY"), col1, rowY);
-    doc.text(data.scan_name || "-", col2, rowY);
-    doc.text(`Rs. ${formattedAmount}`, col3, rowY, { width: 100, align: "left", lineBreak: false });
 
-    doc.moveTo(margin, rowY + 25).lineTo(rightX, rowY + 25).stroke();
+    rows.forEach((row, index) => {
+      const amount = Number(String(row.amount).replace(/[^\d.]/g, "")) || 0;
+      const formattedAmount = amount.toFixed(2);
+      const slNo = index + 1;
 
-    const totalY = rowY + 50;
+      doc.text(String(slNo), col1, currentY);
+      doc.text(dayjs(row.upload_date).format("DD-MM-YYYY"), col2, currentY);
+      doc.text(row.scan_name || "-", col3, currentY);
+      doc.text(`Rs. ${formattedAmount}`, col4, currentY, { 
+        width: 100, 
+        align: "left", 
+        lineBreak: false 
+      });
+
+      currentY += 25;
+    });
+
+    doc.moveTo(margin, currentY).lineTo(rightX, currentY).stroke();
+
+    const totalY = currentY + 20;
     doc.font("Helvetica-Bold").fontSize(14);
-    doc.text(`Total Amount: Rs. ${formattedAmount}`, col2, totalY, {
+    doc.text(`Total Amount: Rs. ${formattedTotal}`, col2, totalY, {
       width: rightX - col2,
       align: "right",
       lineBreak: false

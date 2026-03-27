@@ -26,6 +26,7 @@ import DailyReport from "../pages/reports/DailyReport";
 
 // Settings
 import UploadSignature from "../pages/settings/UploadSignature";
+import SoundSettings from "../pages/settings/SoundSettings";
 
 const AppRoutes = () => {
 
@@ -66,6 +67,7 @@ const AppRoutes = () => {
 
           {/* Settings */}
           <Route path="settings/signature" element={<UploadSignature />} />
+          <Route path="settings/sounds" element={<SoundSettings />} />
 
         </Route>
       )}

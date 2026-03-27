@@ -30,6 +30,7 @@ import {
   History as HistoryIcon,
   Settings as SettingsIcon,
   Draw as SignatureIcon,
+  VolumeUp as SoundIcon,
 } from "@mui/icons-material";
 
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
@@ -180,13 +181,23 @@ const DashboardLayout = () => {
 
         {/* Settings */}
         <ListItemButton
-          selected={isActive("/settings")}
+          selected={isActive("/settings/signature")}
           onClick={() => navigate("/settings/signature")}
         >
           <ListItemIcon>
             <SignatureIcon />
           </ListItemIcon>
           <ListItemText primary="Upload Signature" />
+        </ListItemButton>
+
+        <ListItemButton
+          selected={isActive("/settings/sounds")}
+          onClick={() => navigate("/settings/sounds")}
+        >
+          <ListItemIcon>
+            <SoundIcon />
+          </ListItemIcon>
+          <ListItemText primary="Sound Settings" />
         </ListItemButton>
 
       </List>
@@ -297,6 +308,12 @@ const DashboardLayout = () => {
           <Tooltip title="Settings">
           <IconButton onClick={() => navigate("/settings/signature")} sx={iconStyle(isActive("/settings"))}>
             <SettingsIcon />
+          </IconButton>
+          </Tooltip>
+
+          <Tooltip title="Sound Settings">
+          <IconButton onClick={() => navigate("/settings/sounds")} sx={iconStyle(isActive("/settings/sounds"))}>
+            <SoundIcon />
           </IconButton>
           </Tooltip>
 

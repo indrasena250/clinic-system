@@ -185,6 +185,7 @@ const handleEditClose = () => {
       >
         <MenuItem value="USG">USG</MenuItem>
         <MenuItem value="CT">CT</MenuItem>
+        <MenuItem value="XRAY">XRAY</MenuItem>
         <MenuItem value="Other">Other</MenuItem>
       </TextField>
     </Grid>
@@ -258,6 +259,7 @@ const handleEditClose = () => {
        >
          <MenuItem value="USG">USG</MenuItem>
          <MenuItem value="CT">CT</MenuItem>
+         <MenuItem value="XRAY">XRAY</MenuItem>
          <MenuItem value="Other">Other</MenuItem>
        </TextField>
       </Grid>

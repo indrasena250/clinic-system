@@ -19,7 +19,7 @@ import EditIcon from "@mui/icons-material/Edit";
 import FileDownloadIcon from "@mui/icons-material/FileDownload";
 import SendIcon from "@mui/icons-material/Send";
 import ClearIcon from "@mui/icons-material/Clear";
-import { fetchUltrasoundPatients, updatePatient, downloadInvoicePDF } from "../../api/patientApi";
+import { fetchUltrasoundPatients, updatePatient, downloadInvoicePDF, fetchInvoiceScans } from "../../api/patientApi";
 import API from "../../api/axios";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
@@ -50,6 +50,7 @@ const UltrasoundList = () => {
       const mappedRows = data.map((item, index) => ({
         slno: index + 1,
         id: item.id,
+        invoice_id: item.invoice_id,
         patient_name: item.patient_name,
         age: item.age,
         gender: item.gender,
@@ -121,21 +122,29 @@ const UltrasoundList = () => {
     }
   };
 
-  const handleDownloadInvoice = async (patientId) => {
+  const handleDownloadInvoice = async (invoiceId) => {
     try {
-      const blob = await downloadInvoicePDF(patientId);
+      console.log("Downloading invoice for:", invoiceId, typeof invoiceId);
+      if (!invoiceId) {
+        alert("Invalid invoice ID");
+        return;
+      }
+
+      const blob = await downloadInvoicePDF(invoiceId);
+      console.log("Received blob:", blob);
       if (!blob) throw new Error("No PDF data received");
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.setAttribute("download", `invoice-${patientId}.pdf`);
+      link.setAttribute("download", `invoice-${invoiceId}.pdf`);
       document.body.appendChild(link);
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
+      console.log("Invoice download completed");
     } catch (error) {
       console.error("Download error:", error);
-      alert("Failed to download invoice");
+      alert("Failed to download invoice: " + (error.message || "Unknown error"));
     }
   };
 
@@ -149,17 +158,22 @@ const UltrasoundList = () => {
 
   const CENTER_NAME = "SRIDEVI DIAGNOSTIC CENTER";
 
-  const formatInvoiceMessage = (row, invoiceUrl) => {
-    const name = row.patient_name || "-";
-    const age = row.age ?? "-";
-    const gender = row.gender || "-";
-    const category = row.scan_category || "-";
-    const type = row.scan_name || "-";
-    const amount = Number(row.amount ?? 0);
-    const formattedAmount = Number.isFinite(amount) ? amount.toFixed(2) : String(row.amount ?? "-");
-    const dateStr = formatDateTime(row.upload_date);
+  const formatInvoiceMessage = (patientRow, allScans, invoiceUrl) => {
+    const name = patientRow.patient_name || "-";
+    const age = patientRow.age ?? "-";
+    const gender = patientRow.gender || "-";
 
-    return [
+    // Calculate total amount from all scans
+    let totalAmount = 0;
+    allScans.forEach((scan) => {
+      const amount = Number(scan.amount ?? 0);
+      if (Number.isFinite(amount)) {
+        totalAmount += amount;
+      }
+    });
+    const formattedTotal = totalAmount.toFixed(2);
+
+    const messageLines = [
       `${CENTER_NAME}`,
       "Hello!",
       "",
@@ -169,50 +183,91 @@ const UltrasoundList = () => {
       `Gender: ${gender}`,
       "",
       "Scan Details:",
-      `Category: ${category}`,
-      `Type: ${type}`,
+    ];
+
+    // Add each scan
+    allScans.forEach((scan, index) => {
+      const category = scan.scan_category || "-";
+      const type = scan.scan_name || "-";
+      const amount = Number(scan.amount ?? 0);
+      const formattedAmount = Number.isFinite(amount) ? amount.toFixed(2) : String(scan.amount ?? "-");
+      const dateStr = formatDateTime(scan.upload_date);
+
+      messageLines.push(`${index + 1}. ${type} (${category})`);
+      messageLines.push(`   Amount: ₹${formattedAmount}`);
+      messageLines.push(`   Date: ${dateStr}`);
+    });
+
+    messageLines.push(
       "",
-      `Amount: ₹${formattedAmount}`,
-      `Date: ${dateStr}`,
+      `Total Amount: ₹${formattedTotal}`,
       "",
       "Thank you for visiting us.",
       "Wishing you good health!",
       "",
-      `Download PDF: ${invoiceUrl}`,
-    ].join("\n");
+      `Download PDF: ${invoiceUrl}`
+    );
+
+    return messageLines.join("\n");
   };
 
-  const handleSendWhatsApp = (row) => {
+  const handleSendWhatsApp = async (row) => {
     const waNumber = toWhatsAppNumber(row.mobile);
     if (!waNumber) {
       alert("Patient mobile number not found");
       return;
     }
 
-    // Open WhatsApp chat immediately on click (avoids popup blockers).
-    const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL || API.defaults.baseURL).replace(/\/+$/, "");
-    const invoiceUrl = `${baseUrl}/patients/invoice/public/${row.id}`;
-    const message = formatInvoiceMessage(row, invoiceUrl);
-    const encodedMessage = encodeURIComponent(message);
-    const whatsappUrl = `https://wa.me/${waNumber}?text=${encodedMessage}`;
-    window.open(whatsappUrl, "_blank", "noopener,noreferrer");
+    if (!row.invoice_id) {
+      alert("Invalid invoice ID");
+      return;
+    }
+
+    try {
+      console.log("Fetching scans for invoice:", row.invoice_id, typeof row.invoice_id);
+      // Fetch ALL scans for this invoice_id from API (not just from current list)
+      const allScans = await fetchInvoiceScans(row.invoice_id);
+      console.log("Fetched scans:", allScans);
+
+      if (!allScans.length) {
+        alert("No scans found for this invoice");
+        return;
+      }
+
+      // Open WhatsApp chat immediately on click (avoids popup blockers).
+      const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL || API.defaults.baseURL).replace(/\/+$/, "");
+      const invoiceUrl = `${baseUrl}/patients/invoice/public/${row.invoice_id}`;
+      const message = formatInvoiceMessage(row, allScans, invoiceUrl);
+      console.log("WhatsApp message:", message);
+
+      const encodedMessage = encodeURIComponent(message);
+      const whatsappUrl = `https://wa.me/${waNumber}?text=${encodedMessage}`;
+      console.log("WhatsApp URL:", whatsappUrl);
+
+      window.open(whatsappUrl, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      console.error("WhatsApp error:", error);
+      alert("Failed to send WhatsApp message: " + (error.message || "Unknown error"));
+    }
   };
 
   const columns = [
     {
       field: "slno",
       headerName: "SL No",
-      width: 60,
-      align: "center",
-      headerAlign: "center",
+      width: 50,
+      align: "left",
+      headerAlign: "left",
     },
-    { field: "id", headerName: "ID", width: 70, align: "center", headerAlign: "center" },
+    { field: "id", headerName: "ID", width: 60, align: "left", headerAlign: "left" },
     {
       field: "upload_date",
       headerName: "Date & Time",
-      width: 180,
+      width: 160,
+      align: "left",
+      headerAlign: "left",
       renderCell: (params) => (
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, height: "100%" }}>
           <Typography sx={{ fontSize: "14px", color: "#666" }}>
             {formatDate(params.value)}
           </Typography>
@@ -224,44 +279,49 @@ const UltrasoundList = () => {
               color: "#fff",
               fontWeight: "bold",
               fontSize: "12px",
+              height: "20px",
             }}
           />
         </Box>
       ),
     },
-    { field: "patient_name", headerName: "Patient Name", flex: 1.2, minWidth: 140 },
-    { field: "age", headerName: "Age", width: 65, align: "center", headerAlign: "center" },
-    { field: "gender", headerName: "Gender", width: 80, align: "center", headerAlign: "center" },
-    { field: "mobile", headerName: "Mobile", width: 120 },
+    { field: "patient_name", headerName: "Patient Name", width: 120, align: "left", headerAlign: "left" },
+    { field: "age", headerName: "Age", width: 50, align: "left", headerAlign: "left" },
+    { field: "gender", headerName: "Gender", width: 70, align: "left", headerAlign: "left" },
+    {
+      field: "scan_name",
+      headerName: "Scan Name",
+      width: 110,
+      align: "left",
+      headerAlign: "left",
+      renderCell: (params) => (
+        <Typography sx={{ fontSize: 14, whiteSpace: "normal", wordBreak: "break-word" }}>
+          {params.value || "-"}
+        </Typography>
+      ),
+    },
+    
+    {
+      field: "referred_doctor",
+      headerName: "Refferal Doctor",
+      width: 100,
+      align: "left",
+      headerAlign: "left",
+      renderCell: (params) => (
+        <Typography sx={{ fontSize: 14, whiteSpace: "normal", wordBreak: "break-word" }}>
+          {params.value || "-"}
+        </Typography>
+      ),
+    },
+    { field: "mobile", headerName: "Mobile", width: 110, align: "left", headerAlign: "left" },
     {
       field: "address",
       headerName: "Address",
-      flex: 1,
-      minWidth: 130,
+      width: 110,
+      align: "left",
+      headerAlign: "left",
       renderCell: (params) => (
-        <Typography sx={{ fontSize: 13, whiteSpace: "normal", wordBreak: "break-word", py: 1 }}>
-          {params.value || "-"}
-        </Typography>
-      ),
-    },
-    {
-      field: "scan_name",
-      headerName: "Scan Type",
-      flex: 1,
-      minWidth: 130,
-      renderCell: (params) => (
-        <Typography sx={{ fontSize: 13, whiteSpace: "normal", wordBreak: "break-word", py: 1 }}>
-          {params.value || "-"}
-        </Typography>
-      ),
-    },
-    {
-      field: "referred_doctor",
-      headerName: "Referred Doctor",
-      flex: 1,
-      minWidth: 130,
-      renderCell: (params) => (
-        <Typography sx={{ fontSize: 13, whiteSpace: "normal", wordBreak: "break-word", py: 1 }}>
+        <Typography sx={{ fontSize: 14, whiteSpace: "normal", wordBreak: "break-word" }}>
           {params.value || "-"}
         </Typography>
       ),
@@ -269,33 +329,33 @@ const UltrasoundList = () => {
     {
       field: "amount",
       headerName: "Amount",
-      width: 100,
-      align: "right",
-      headerAlign: "right",
+      width: 85,
+      align: "left",
+      headerAlign: "left",
       renderCell: (params) => `₹ ${params.value}`,
     },
     {
       field: "tools",
       headerName: "Actions",
-      width: 130,
+      width: 120,
       sortable: false,
       filterable: false,
-      align: "center",
-      headerAlign: "center",
+      align: "left",
+      headerAlign: "left",
       renderCell: (params) => (
         <Box sx={{ 
           display: "flex", 
           flexDirection: "row", 
           gap: 1, 
           alignItems: "center", 
-          justifyContent: "center", 
+          justifyContent: "flex-start", 
           width: "100%"
         }}>
           <IconButton
             color="success"
             title="Download Invoice"
             size="small"
-            onClick={() => handleDownloadInvoice(params.row.id)}
+            onClick={() => handleDownloadInvoice(params.row.invoice_id)}
           >
             <FileDownloadIcon fontSize="small" />
           </IconButton>
@@ -415,16 +475,22 @@ const UltrasoundList = () => {
             "& .MuiDataGrid-cell": {
               whiteSpace: "normal !important",
               wordBreak: "break-word",
-              lineHeight: 1.25,
-              px: 0.75,
-              py: 0.75,
-              alignItems: "flex-start",
-            },
-            "& .MuiDataGrid-columnHeader": {
-              px: 0.75,
+              lineHeight: 1.3,
+              px: 0.5,
+              py: 0.5,
+              display: "flex",
+              alignItems: "center",
             },
             "& .MuiDataGrid-row": {
               maxHeight: "none !important",
+              "&:hover": {
+                backgroundColor: "#f5f5f5",
+              }
+            },
+            "& .MuiDataGrid-columnHeader": {
+              px: 0.5,
+              backgroundColor: "#f0f0f0",
+              fontWeight: "bold",
             },
           }}
         />
