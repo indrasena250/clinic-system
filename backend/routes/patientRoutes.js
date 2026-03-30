@@ -658,10 +658,10 @@ async (req, res) => {
       const { doctor, from, to } = req.params;
 
       const [rows] = await db.query(
-        `SELECT upload_date, patient_name, scan_name, referral_amount
+        `SELECT upload_date, patient_name, scan_name, referral_amount, scan_category
          FROM patients
          WHERE clinic_id = ? AND referred_doctor = ? AND DATE(upload_date) BETWEEN ? AND ?
-         ORDER BY upload_date ASC`,
+         ORDER BY FIELD(scan_category, 'Ultrasound', 'CT'), upload_date ASC`,
         [clinicId, doctor, from, to]
       );
 

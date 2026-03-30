@@ -152,12 +152,8 @@ const UltrasoundList = () => {
         localStorage.setItem("doctors", JSON.stringify(updated));
       }
 
-      setRows((prev) =>
-        prev.map((row) =>
-          row.id === editData.id ? { ...row, ...editData, age: formattedAge } : row
-        )
-      );
-
+      // Reload from backend so mobile/desktop views stay in sync (esp. doctor updates)
+      await loadData();
       setOpen(false);
     } catch (error) {
       console.log("UPDATE ERROR:", error.response?.data);
@@ -235,13 +231,12 @@ const UltrasoundList = () => {
 
     // Add each scan
     allScans.forEach((scan, index) => {
-      const category = scan.scan_category || "-";
       const type = scan.scan_name || "-";
       const amount = Number(scan.amount ?? 0);
       const formattedAmount = Number.isFinite(amount) ? amount.toFixed(2) : String(scan.amount ?? "-");
       const dateStr = formatDateTime(scan.upload_date);
 
-      messageLines.push(`${index + 1}. ${type} (${category})`);
+      messageLines.push(`${index + 1}. ${type}`);
       messageLines.push(`   Amount: ₹${formattedAmount}`);
       messageLines.push(`   Date: ${dateStr}`);
     });
@@ -345,19 +340,6 @@ const UltrasoundList = () => {
     { field: "patient_name", headerName: "Patient Name", flex: 1.5, minWidth: 110, align: "left", headerAlign: "left" },
     { field: "age", headerName: "Age", flex: 0.4, minWidth: 48, align: "left", headerAlign: "left" },
     { field: "gender", headerName: "Gender", flex: 0.6, minWidth: 70, align: "left", headerAlign: "left" },
-    {
-      field: "scan_category",
-      headerName: "Scan Category",
-      flex: 1,
-      minWidth: 110,
-      align: "left",
-      headerAlign: "left",
-      renderCell: (params) => (
-        <Typography sx={{ fontSize: 14, whiteSpace: "normal", wordBreak: "break-word" }}>
-          {params.value || "-"}
-        </Typography>
-      ),
-    },
     {
       field: "scan_name",
       headerName: "Scan Name",
@@ -603,7 +585,7 @@ const UltrasoundList = () => {
                       </Typography>
                     </Box>
                     <Typography variant="body1" sx={{ fontWeight: 500, color: "#555" }}>
-                      {row.scan_category || "-"} / {row.scan_name || "-"}
+                      {row.scan_name || "-"}
                     </Typography>
                   </Grid>
 

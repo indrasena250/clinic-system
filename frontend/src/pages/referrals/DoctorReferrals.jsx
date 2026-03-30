@@ -109,25 +109,27 @@ const DoctorReferral = () => {
   const handleChange = async (id, field, value) => {
     console.log(`Updating field: ${field}, value: ${value}, for id: ${id}`);
     
-    // Update UI immediately
-    const updatedRows = rows.map((row) =>
-      row.id === id 
-        ? { 
-            ...row, 
-            [field]: field === "referral_amount" ? Number(value) : value 
-          } 
-        : row
-    );
-    setRows(updatedRows);
+    // Update UI immediately (use functional update to avoid stale state issues)
+    let updatedRowSnapshot = null;
+    setRows((prev) => {
+      const next = prev.map((row) => {
+        if (row.id !== id) return row;
+        const nextRow = {
+          ...row,
+          [field]: field === "referral_amount" ? Number(value) : value,
+        };
+        updatedRowSnapshot = nextRow;
+        return nextRow;
+      });
+      return next;
+    });
     setEditingId(null);
 
     // Auto-save to backend
     try {
-      const updatedRow = updatedRows.find(r => r.id === id);
-      
       const dataToSend = {
-        referral_amount: Number(updatedRow.referral_amount),
-        referral_status: updatedRow.referral_status,
+        referral_amount: Number(updatedRowSnapshot?.referral_amount),
+        referral_status: updatedRowSnapshot?.referral_status,
       };
 
       console.log("Sending to backend:", dataToSend);
@@ -154,6 +156,32 @@ const DoctorReferral = () => {
       loadPatients();
     }
 
+  };
+
+  const handleMobileSave = async (id) => {
+    try {
+      await updateReferral(id, {
+        referral_amount: Number(editDraft.referral_amount),
+        referral_status: editDraft.referral_status,
+      });
+
+      setSnackbar({
+        open: true,
+        message: "Updated successfully",
+        severity: "success",
+      });
+
+      setEditingId(null);
+      await loadPatients();
+    } catch (error) {
+      console.error("Update error:", error);
+      setSnackbar({
+        open: true,
+        message: error.response?.data?.message || "Failed to update",
+        severity: "error",
+      });
+      await loadPatients();
+    }
   };
 
   /* ============================
@@ -424,11 +452,7 @@ const DoctorReferral = () => {
                       <Button
                         size="small"
                         variant="contained"
-                        onClick={async () => {
-                          await handleChange(row.id, "referral_amount", editDraft.referral_amount);
-                          await handleChange(row.id, "referral_status", editDraft.referral_status);
-                          setEditingId(null);
-                        }}
+                        onClick={() => handleMobileSave(row.id)}
                       >
                         Save
                       </Button>

@@ -155,14 +155,8 @@ const handleUpdate = async () => {
       localStorage.setItem("doctors", JSON.stringify(updated));
     }
 
-    setRows(prev =>
-      prev.map(row =>
-        row.id === editData.id
-          ? { ...row, ...editData, age: formattedAge }
-          : row
-      )
-    );
-
+    // Reload from backend so mobile/desktop views stay in sync (esp. doctor updates)
+    await loadData();
     setOpen(false);
   } catch (error) {
     console.log("UPDATE ERROR:", error.response?.data);
@@ -233,13 +227,12 @@ const formatInvoiceMessage = (patientRow, allScans, invoiceUrl) => {
 
   // Add each scan
   allScans.forEach((scan, index) => {
-    const category = scan.scan_category || "-";
     const type = scan.scan_name || "-";
     const amount = Number(scan.amount ?? 0);
     const formattedAmount = Number.isFinite(amount) ? amount.toFixed(2) : String(scan.amount ?? "-");
     const dateStr = formatDateTime(scan.upload_date);
 
-    messageLines.push(`${index + 1}. ${type} (${category})`);
+    messageLines.push(`${index + 1}. ${type}`);
     messageLines.push(`   Amount: ₹${formattedAmount}`);
     messageLines.push(`   Date: ${dateStr}`);
   });
@@ -344,7 +337,7 @@ const handleSendWhatsApp = async (row) => {
     { field: "gender", headerName: "Gender", flex: 0.6, minWidth: 70, align: "left", headerAlign: "left" },
     {
       field: "scan_name",
-      headerName: "Scan Type",
+      headerName: "Scan Name",
       flex: 1.1,
       minWidth: 105,
       align: "left",
