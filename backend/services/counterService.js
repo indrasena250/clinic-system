@@ -27,7 +27,7 @@ async function getLastSettlementToTime(clinicId) {
 /**
  * Get aggregated totals for a specific date - NEW DATA ONLY (after last settlement)
  * @param {number} clinicId
- * @param {string} date - YYYY-MM-DD format
+ * @param {string} date - DD-MM-YYYY format
  */
 async function getDailyTotals(clinicId, date) {
   const lastSettlement = await getLastSettlementToTime(clinicId);

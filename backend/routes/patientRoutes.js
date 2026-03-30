@@ -72,24 +72,37 @@ async function drawSignature(doc, pageWidth, margin, clinicId) {
       });
     });
 
-    const sigWidth = 180;
-    const sigHeight = 90;
-    const sigX = pageWidth - margin - sigWidth - 10;
-    const sigY = doc.y + 10;
+    // Fit any signature format/size into a consistent box while preserving aspect ratio.
+    // Also ensure the label is centered exactly under the drawn image width.
+    const maxSigWidth = 180;
+    const maxSigHeight = 90;
 
-    doc.image(signatureBuffer, sigX, sigY, {
-      fit: [sigWidth, sigHeight],
-      align: 'right'
-    });
+    const img = doc.openImage(signatureBuffer);
+    const naturalW = img.width || maxSigWidth;
+    const naturalH = img.height || maxSigHeight;
+
+    // Allow upscaling small signatures so they "fit" the box too.
+    const scale = Math.min(maxSigWidth / naturalW, maxSigHeight / naturalH);
+    const drawW = Math.max(1, Math.round(naturalW * scale));
+    const drawH = Math.max(1, Math.round(naturalH * scale));
+
+    // Keep a consistent signature box aligned to the right, then center the image inside it.
+    const boxX = pageWidth - maxSigWidth - 10;
+    const boxY = doc.y - 8;
+
+    const sigX = boxX + Math.round((maxSigWidth - drawW) / 2);
+    const sigY = boxY + Math.round((maxSigHeight - drawH) / 2);
+
+    doc.image(img, sigX, sigY, { width: drawW, height: drawH });
 
     doc.font("Helvetica-Bold")
       .fontSize(10)
       .text(
         "Authorized Signature",
-        sigX,
-        sigY + sigHeight + 8,
+        boxX,
+        boxY + maxSigHeight -10,
         {
-          width: sigWidth,
+          width: maxSigWidth,
           align: "center"
         }
       );
@@ -891,7 +904,11 @@ router.get(
       
       // Get last settlement times
       const [settlementRows] = await db.query(
-        `SELECT from_time, to_time FROM settlements WHERE clinic_id = ? ORDER BY to_time DESC LIMIT 1`,
+        `SELECT from_time, to_time, created_at
+         FROM settlements
+         WHERE clinic_id = ?
+         ORDER BY created_at DESC, id DESC
+         LIMIT 1`,
         [clinicId]
       );
       
@@ -900,12 +917,44 @@ router.get(
       if (settlementRows[0]) {
         // From last settlement to_time to current IST moment
         const st = settlementRows[0];
-        from = st.to_time instanceof Date ? dayjs(st.to_time).tz("Asia/Kolkata") : dayjs(String(st.to_time)).tz("Asia/Kolkata");
+        const toTimeRaw = st.to_time;
+        const createdAtRaw = st.created_at;
+
+        let settlementTo = toTimeRaw instanceof Date
+          ? dayjs(toTimeRaw).tz("Asia/Kolkata")
+          : dayjs(String(toTimeRaw)).tz("Asia/Kolkata");
+
+        // If to_time is missing a real time (e.g. date-only or 00:00:00), fall back to created_at
+        const rawStr = typeof toTimeRaw === "string" ? toTimeRaw : "";
+        const toLooksDateOnly = rawStr && rawStr.length === 10;
+        const toIsMidnight = settlementTo.isValid() && settlementTo.format("HH:mm:ss") === "00:00:00";
+        if (!settlementTo.isValid() || toLooksDateOnly || toIsMidnight) {
+          const fallback = createdAtRaw instanceof Date
+            ? dayjs(createdAtRaw).tz("Asia/Kolkata")
+            : dayjs(String(createdAtRaw)).tz("Asia/Kolkata");
+          if (fallback.isValid()) settlementTo = fallback;
+        }
+
+        from = settlementTo;
         to = dayjs().tz("Asia/Kolkata");
       } else {
-        // Fallback: from start of today IST to now IST
+        // If no settlement exists yet (ex: 1st settlement not completed),
+        // start the daily report from the very first scan onward.
         const now = dayjs().tz("Asia/Kolkata");
-        from = now.startOf("day");
+        const [firstPatientRows] = await db.query(
+          `SELECT MIN(COALESCE(created_at, upload_date)) AS first_time
+           FROM patients
+           WHERE clinic_id = ?`,
+          [clinicId]
+        );
+        const firstTimeRaw = firstPatientRows?.[0]?.first_time;
+        const firstTime = firstTimeRaw
+          ? (firstTimeRaw instanceof Date
+              ? dayjs(firstTimeRaw).tz("Asia/Kolkata")
+              : dayjs(String(firstTimeRaw)).tz("Asia/Kolkata"))
+          : null;
+
+        from = firstTime && firstTime.isValid() ? firstTime : now.startOf("day");
         to = now;
       }
       
@@ -918,7 +967,9 @@ router.get(
           `SELECT IFNULL(SUM(CASE WHEN p.scan_category = 'CT' THEN p.amount - IFNULL(p.referral_amount, 0) ELSE 0 END), 0) AS ct_income,
                   IFNULL(SUM(CASE WHEN p.scan_category = 'Ultrasound' THEN p.amount - IFNULL(p.referral_amount, 0) ELSE 0 END), 0) AS usg_income
            FROM patients p
-           WHERE p.clinic_id = ? AND p.created_at >= ? AND p.created_at < ?`,
+           WHERE p.clinic_id = ?
+             AND COALESCE(p.created_at, p.upload_date) >= ?
+             AND COALESCE(p.created_at, p.upload_date) < ?`,
           [clinicId, fromStr, toStr]
         );
       } catch (e) {
@@ -926,8 +977,10 @@ router.get(
           `SELECT IFNULL(SUM(CASE WHEN p.scan_category = 'CT' THEN p.amount - IFNULL(p.referral_amount, 0) ELSE 0 END), 0) AS ct_income,
                   IFNULL(SUM(CASE WHEN p.scan_category = 'Ultrasound' THEN p.amount - IFNULL(p.referral_amount, 0) ELSE 0 END), 0) AS usg_income
            FROM patients p
-           WHERE p.clinic_id = ? AND DATE(p.COALESCE(created_at, upload_date)) = ?`,
-          [clinicId, date]
+           WHERE p.clinic_id = ?
+             AND COALESCE(p.created_at, p.upload_date) >= ?
+             AND COALESCE(p.created_at, p.upload_date) < ?`,
+          [clinicId, fromStr, toStr]
         );
       }
 
@@ -936,15 +989,17 @@ router.get(
         [extraIncome] = await db.query(
           `SELECT IFNULL(SUM(CASE WHEN income_type = 'CT' THEN amount ELSE 0 END), 0) AS extra_ct,
                   IFNULL(SUM(CASE WHEN income_type = 'USG' THEN amount ELSE 0 END), 0) AS extra_usg,
+                  IFNULL(SUM(CASE WHEN income_type = 'XRAY' THEN amount ELSE 0 END), 0) AS extra_xray,
                   IFNULL(SUM(CASE WHEN income_type = 'Other' THEN amount ELSE 0 END), 0) AS other_income,
                   IFNULL(SUM(amount), 0) AS total_extra
-           FROM extra_income WHERE clinic_id = ? AND created_at >= ? AND created_at < ?`,
+           FROM extra_income WHERE clinic_id = ? AND COALESCE(created_at, income_date) >= ? AND COALESCE(created_at, income_date) < ?`,
           [clinicId, fromStr, toStr]
         );
       } catch (e) {
         [extraIncome] = await db.query(
           `SELECT IFNULL(SUM(CASE WHEN income_type = 'CT' THEN amount ELSE 0 END), 0) AS extra_ct,
                   IFNULL(SUM(CASE WHEN income_type = 'USG' THEN amount ELSE 0 END), 0) AS extra_usg,
+                  IFNULL(SUM(CASE WHEN income_type = 'XRAY' THEN amount ELSE 0 END), 0) AS extra_xray,
                   IFNULL(SUM(CASE WHEN income_type = 'Other' THEN amount ELSE 0 END), 0) AS other_income,
                   IFNULL(SUM(amount), 0) AS total_extra
            FROM extra_income WHERE clinic_id = ? AND DATE(income_date) = ?`,
@@ -955,7 +1010,7 @@ router.get(
       let expenseRows;
       try {
         [expenseRows] = await db.query(
-          `SELECT IFNULL(SUM(amount), 0) AS total FROM expenses WHERE clinic_id = ? AND created_at >= ? AND created_at < ?`,
+          `SELECT IFNULL(SUM(amount), 0) AS total FROM expenses WHERE clinic_id = ? AND COALESCE(created_at, expense_date) >= ? AND COALESCE(created_at, expense_date) < ?`,
           [clinicId, fromStr, toStr]
         );
       } catch (e) {
@@ -967,7 +1022,7 @@ router.get(
 
       const ct = Number(patientIncome[0]?.ct_income || 0) + Number(extraIncome[0]?.extra_ct || 0);
       const usg = Number(patientIncome[0]?.usg_income || 0) + Number(extraIncome[0]?.extra_usg || 0);
-      const other = Number(extraIncome[0]?.other_income || 0);
+      const other = Number(extraIncome[0]?.extra_xray || 0) + Number(extraIncome[0]?.other_income || 0);
       const income = ct + usg + other;
       const expenses = Number(expenseRows[0]?.total || 0);
       const net = income - expenses;
@@ -998,7 +1053,11 @@ router.get("/daily-report-pdf/:date",protect, authorize("admin"), async (req, re
         
         // Get last settlement window
         const [settlementRows] = await db.query(
-          `SELECT from_time, to_time FROM settlements WHERE clinic_id = ? ORDER BY to_time DESC LIMIT 1`,
+          `SELECT from_time, to_time, created_at
+           FROM settlements
+           WHERE clinic_id = ?
+           ORDER BY created_at DESC, id DESC
+           LIMIT 1`,
           [clinicId]
         );
         
@@ -1007,12 +1066,43 @@ router.get("/daily-report-pdf/:date",protect, authorize("admin"), async (req, re
         if (settlementRows[0]) {
           // From last settlement to_time to current IST time
           const st = settlementRows[0];
-          from = st.to_time instanceof Date ? dayjs(st.to_time).tz("Asia/Kolkata") : dayjs(String(st.to_time)).tz("Asia/Kolkata");
+          const toTimeRaw = st.to_time;
+          const createdAtRaw = st.created_at;
+
+          let settlementTo = toTimeRaw instanceof Date
+            ? dayjs(toTimeRaw).tz("Asia/Kolkata")
+            : dayjs(String(toTimeRaw)).tz("Asia/Kolkata");
+
+          const rawStr = typeof toTimeRaw === "string" ? toTimeRaw : "";
+          const toLooksDateOnly = rawStr && rawStr.length === 10;
+          const toIsMidnight = settlementTo.isValid() && settlementTo.format("HH:mm:ss") === "00:00:00";
+          if (!settlementTo.isValid() || toLooksDateOnly || toIsMidnight) {
+            const fallback = createdAtRaw instanceof Date
+              ? dayjs(createdAtRaw).tz("Asia/Kolkata")
+              : dayjs(String(createdAtRaw)).tz("Asia/Kolkata");
+            if (fallback.isValid()) settlementTo = fallback;
+          }
+
+          from = settlementTo;
           to = dayjs().tz("Asia/Kolkata");
         } else {
-          // From start of today IST to current IST
+          // If no settlement exists yet (ex: 1st settlement not completed),
+          // start the daily report from the very first scan onward.
           const now = dayjs().tz("Asia/Kolkata");
-          from = now.startOf("day");
+          const [firstPatientRows] = await db.query(
+            `SELECT MIN(COALESCE(created_at, upload_date)) AS first_time
+             FROM patients
+             WHERE clinic_id = ?`,
+            [clinicId]
+          );
+          const firstTimeRaw = firstPatientRows?.[0]?.first_time;
+          const firstTime = firstTimeRaw
+            ? (firstTimeRaw instanceof Date
+                ? dayjs(firstTimeRaw).tz("Asia/Kolkata")
+                : dayjs(String(firstTimeRaw)).tz("Asia/Kolkata"))
+            : null;
+
+          from = firstTime && firstTime.isValid() ? firstTime : now.startOf("day");
           to = now;
         }
         
@@ -1024,7 +1114,9 @@ router.get("/daily-report-pdf/:date",protect, authorize("admin"), async (req, re
           const [rows] = await db.query(
             `SELECT p.id, p.patient_name, p.scan_name, p.referred_doctor, p.amount, IFNULL(p.referral_amount, 0) AS referral_amount
              FROM patients p
-             WHERE p.clinic_id = ? AND p.created_at >= ? AND p.created_at < ?
+             WHERE p.clinic_id = ?
+               AND COALESCE(p.created_at, p.upload_date) >= ?
+               AND COALESCE(p.created_at, p.upload_date) < ?
              ORDER BY FIELD(p.scan_category, 'Ultrasound', 'CT'), p.id ASC`,
             [clinicId, fromStr, toStr]
           );
@@ -1032,9 +1124,11 @@ router.get("/daily-report-pdf/:date",protect, authorize("admin"), async (req, re
         } catch (e) {
           const [rows] = await db.query(
             `SELECT p.id, p.patient_name, p.scan_name, p.referred_doctor, p.amount, IFNULL(p.referral_amount, 0) AS referral_amount
-             FROM patients p WHERE p.clinic_id = ? AND DATE(COALESCE(p.created_at, p.upload_date)) = ?
+             FROM patients p WHERE p.clinic_id = ?
+               AND COALESCE(p.created_at, p.upload_date) >= ?
+               AND COALESCE(p.created_at, p.upload_date) < ?
              ORDER BY FIELD(p.scan_category, 'Ultrasound', 'CT'), p.id ASC`,
-            [clinicId, date]
+            [clinicId, fromStr, toStr]
           );
           results = rows;
         }
@@ -1047,9 +1141,14 @@ router.get("/daily-report-pdf/:date",protect, authorize("admin"), async (req, re
         doc.on('end', () => {
             const pdfData = Buffer.concat(buffers);
             res.setHeader("Content-Type", "application/pdf");
+            const reportDate = dayjs(date, "YYYY-MM-DD", true).isValid()
+              ? dayjs(date, "YYYY-MM-DD").format("DD-MM-YYYY")
+              : dayjs(date).isValid()
+                ? dayjs(date).format("DD-MM-YYYY")
+                : String(date);
             res.setHeader(
                 "Content-Disposition",
-                `attachment; filename=daily-report-${date}.pdf`
+                `attachment; filename=${reportDate} REPORT.pdf`
             );
             res.setHeader("Content-Length", pdfData.length);
             res.send(pdfData);
@@ -1148,7 +1247,7 @@ router.get("/daily-report-pdf/:date",protect, authorize("admin"), async (req, re
         let expenseRows;
         try {
           const [rows] = await db.query(
-              `SELECT expense_date, description, amount FROM expenses WHERE clinic_id = ? AND created_at >= ? AND created_at < ? ORDER BY expense_date ASC`,
+              `SELECT expense_date, description, amount FROM expenses WHERE clinic_id = ? AND COALESCE(created_at, expense_date) >= ? AND COALESCE(created_at, expense_date) < ? ORDER BY expense_date ASC`,
               [clinicId, fromStr, toStr]
           );
           expenseRows = rows;
@@ -1170,7 +1269,7 @@ router.get("/daily-report-pdf/:date",protect, authorize("admin"), async (req, re
         let extraRows;
         try {
           const [rows] = await db.query(
-              `SELECT income_date, income_type, description, amount FROM extra_income WHERE clinic_id = ? AND created_at >= ? AND created_at < ? ORDER BY income_date ASC`,
+              `SELECT income_date, income_type, description, amount FROM extra_income WHERE clinic_id = ? AND COALESCE(created_at, income_date) >= ? AND COALESCE(created_at, income_date) < ? ORDER BY income_date ASC`,
               [clinicId, fromStr, toStr]
           );
           extraRows = rows;
@@ -1366,7 +1465,7 @@ router.get("/settlement-pdf/:settlementId", protect, authorize("admin"), async (
             const [rows] = await db.query(
                 `SELECT p.id, p.patient_name, p.scan_name, p.referred_doctor, p.amount, IFNULL(p.referral_amount, 0) AS referral_amount
                  FROM patients p
-                 WHERE p.clinic_id = ? AND p.created_at >= ? AND p.created_at < ?
+                 WHERE p.clinic_id = ? AND COALESCE(p.created_at, p.upload_date) >= ? AND COALESCE(p.created_at, p.upload_date) < ?
                  ORDER BY FIELD(p.scan_category, 'Ultrasound', 'CT'), p.id ASC`,
                 [clinicId, fromStr, toStr]
             );
@@ -1507,7 +1606,7 @@ router.get("/settlement-pdf/:settlementId", protect, authorize("admin"), async (
         let expenseRows;
         try {
             const [rows] = await db.query(
-                `SELECT expense_date, description, amount FROM expenses WHERE clinic_id = ? AND created_at >= ? AND created_at < ? ORDER BY expense_date ASC`,
+                `SELECT expense_date, description, amount FROM expenses WHERE clinic_id = ? AND COALESCE(created_at, expense_date) >= ? AND COALESCE(created_at, expense_date) < ? ORDER BY expense_date ASC`,
                 [clinicId, fromStr, toStr]
             );
             expenseRows = rows;
@@ -1529,7 +1628,7 @@ router.get("/settlement-pdf/:settlementId", protect, authorize("admin"), async (
         let extraRows;
         try {
             const [rows] = await db.query(
-                `SELECT income_date, income_type, description, amount FROM extra_income WHERE clinic_id = ? AND created_at >= ? AND created_at < ? ORDER BY income_date ASC`,
+                `SELECT income_date, income_type, description, amount FROM extra_income WHERE clinic_id = ? AND COALESCE(created_at, income_date) >= ? AND COALESCE(created_at, income_date) < ? ORDER BY income_date ASC`,
                 [clinicId, fromStr, toStr]
             );
             extraRows = rows;
@@ -1710,31 +1809,35 @@ router.get("/dashboard-summary", protect, authorize("admin"), async (req, res) =
     const clinicId = req.user?.clinic_id ?? 1;
     
     // Get today's data in IST
-    const today = dayjs().tz("Asia/Kolkata").format("YYYY-MM-DD"); // YYYY-MM-DD
+    const today = dayjs().tz("Asia/Kolkata");
+    const todayStr = today.format("YYYY-MM-DD");
+    const todayStart = today.format("YYYY-MM-DD 00:00:00");
+    const todayEnd = today.add(1, 'day').format("YYYY-MM-DD 00:00:00");
     
     const [todayPatients] = await db.query(
       `SELECT
         IFNULL(SUM(CASE WHEN scan_category = 'Ultrasound' THEN amount - IFNULL(referral_amount, 0) END), 0) AS ultrasound_income,
         IFNULL(SUM(CASE WHEN scan_category = 'CT' THEN amount - IFNULL(referral_amount, 0) END), 0) AS ct_income
       FROM patients 
-      WHERE clinic_id = ? AND DATE(COALESCE(created_at, upload_date)) = ?`,
-      [clinicId, today]
+      WHERE clinic_id = ? AND COALESCE(created_at, upload_date) >= ? AND COALESCE(created_at, upload_date) < ?`,
+      [clinicId, todayStart, todayEnd]
     );
 
     const [todayExtra] = await db.query(
       `SELECT IFNULL(SUM(CASE WHEN income_type = 'USG' THEN amount ELSE 0 END), 0) AS extra_usg,
               IFNULL(SUM(CASE WHEN income_type = 'CT' THEN amount ELSE 0 END), 0) AS extra_ct,
+              IFNULL(SUM(CASE WHEN income_type = 'XRAY' THEN amount ELSE 0 END), 0) AS extra_xray,
               IFNULL(SUM(CASE WHEN income_type = 'Other' THEN amount ELSE 0 END), 0) AS extra_other
        FROM extra_income 
-       WHERE clinic_id = ? AND DATE(COALESCE(created_at, income_date)) = ?`,
-      [clinicId, today]
+       WHERE clinic_id = ? AND COALESCE(created_at, income_date) >= ? AND COALESCE(created_at, income_date) < ?`,
+      [clinicId, todayStart, todayEnd]
     );
 
     const [todayExpenses] = await db.query(
       `SELECT IFNULL(SUM(amount), 0) AS total_expense 
        FROM expenses 
-       WHERE clinic_id = ? AND DATE(COALESCE(created_at, expense_date)) = ?`,
-      [clinicId, today]
+       WHERE clinic_id = ? AND COALESCE(created_at, expense_date) >= ? AND COALESCE(created_at, expense_date) < ?`,
+      [clinicId, todayStart, todayEnd]
     );
 
     // Get all-time totals for income and expenses
@@ -1749,6 +1852,7 @@ router.get("/dashboard-summary", protect, authorize("admin"), async (req, res) =
     const [allTimeExtra] = await db.query(
       `SELECT IFNULL(SUM(CASE WHEN income_type = 'USG' THEN amount ELSE 0 END), 0) AS extra_usg,
               IFNULL(SUM(CASE WHEN income_type = 'CT' THEN amount ELSE 0 END), 0) AS extra_ct,
+              IFNULL(SUM(CASE WHEN income_type = 'XRAY' THEN amount ELSE 0 END), 0) AS extra_xray,
               IFNULL(SUM(CASE WHEN income_type = 'Other' THEN amount ELSE 0 END), 0) AS extra_other
        FROM extra_income WHERE clinic_id = ?`,
       [clinicId]
@@ -1768,14 +1872,15 @@ router.get("/dashboard-summary", protect, authorize("admin"), async (req, res) =
     // Today's calculations
     const todayUltrasoundIncome = Number(todayPatients[0].ultrasound_income || 0) + Number(todayExtra[0].extra_usg || 0);
     const todayCTIncome = Number(todayPatients[0].ct_income || 0) + Number(todayExtra[0].extra_ct || 0);
+    const todayOtherIncome = Number(todayExtra[0].extra_xray || 0) + Number(todayExtra[0].extra_other || 0);
     const todayExpense = Number(todayExpenses[0].total_expense || 0);
-    const todayNet = todayUltrasoundIncome + todayCTIncome - todayExpense;
+    const todayNet = todayUltrasoundIncome + todayCTIncome + todayOtherIncome - todayExpense;
 
     // All-time calculations
     const totalUltrasound = Number(allTimePatients[0].ultrasound_income || 0) + Number(allTimeExtra[0].extra_usg || 0);
     const totalCT = Number(allTimePatients[0].ct_income || 0) + Number(allTimeExtra[0].extra_ct || 0);
     const totalExpense = Number(allTimeExpenses[0].total_expense || 0);
-    const totalOther = Number(allTimeExtra[0].extra_other || 0);
+    const totalOther = Number(allTimeExtra[0].extra_xray || 0) + Number(allTimeExtra[0].extra_other || 0);
     const totalSettled = Number(settlementTotal[0].total_settled || 0);
 
     const overallIncome = totalUltrasound + totalCT + totalOther;
@@ -1796,6 +1901,7 @@ router.get("/dashboard-summary", protect, authorize("admin"), async (req, res) =
       /* Today's data */
       todayUltrasoundIncome,
       todayCTIncome,
+      todayOtherIncome,
       todayExpense,
       todayNet,
       

@@ -1,13 +1,22 @@
 const db = require("../config/db");
+const dayjs = require("dayjs");
+const utc = require("dayjs/plugin/utc");
+const timezone = require("dayjs/plugin/timezone");
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 exports.addExpense = async (req, res) => {
   try {
     const clinicId = req.user?.clinic_id ?? 1;
     const { expense_date, description, amount } = req.body;
 
+    // Use IST timezone for created_at to match settlement timestamps
+    const istNow = dayjs().tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss");
+
     const [result] = await db.query(
-      "INSERT INTO expenses (clinic_id, expense_date, description, amount, created_at) VALUES (?, ?, ?, ?, NOW())",
-      [clinicId, expense_date, description, amount]
+      "INSERT INTO expenses (clinic_id, expense_date, description, amount, created_at) VALUES (?, ?, ?, ?, ?)",
+      [clinicId, expense_date, description, amount, istNow]
     );
 
     res.json({
@@ -25,7 +34,7 @@ exports.getExpenses = async (req, res) => {
   try {
     const clinicId = req.user?.clinic_id ?? 1;
     const [rows] = await db.query(
-      `SELECT id, expense_date, description, amount FROM expenses WHERE clinic_id = ? ORDER BY expense_date DESC`,
+      `SELECT id, DATE_FORMAT(expense_date, '%Y-%m-%d') AS expense_date, description, amount FROM expenses WHERE clinic_id = ? ORDER BY expense_date DESC`,
       [clinicId]
     );
     res.json(rows);
@@ -69,9 +78,11 @@ exports.updateExpense = async (req, res) => {
 exports.getTodayExpenses = async (req, res) => {
   try {
     const clinicId = req.user?.clinic_id ?? 1;
+    const today = dayjs().tz("Asia/Kolkata").format("YYYY-MM-DD");
+    
     const [rows] = await db.query(
-      `SELECT IFNULL(SUM(amount),0) AS total FROM expenses WHERE clinic_id = ? AND DATE(expense_date) = CURDATE()`,
-      [clinicId]
+      `SELECT IFNULL(SUM(amount),0) AS total FROM expenses WHERE clinic_id = ? AND DATE(COALESCE(created_at, expense_date)) = ?`,
+      [clinicId, today]
     );
     res.json(rows[0]);
 

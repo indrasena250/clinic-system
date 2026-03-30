@@ -97,9 +97,11 @@ exports.getIncomeByType = async (req, res) => {
 exports.getTodayIncome = async (req, res) => {
   try {
     const clinicId = req.user?.clinic_id ?? 1;
+    const today = dayjs().tz("Asia/Kolkata").format("YYYY-MM-DD");
+    
     const [rows] = await db.query(
-      `SELECT IFNULL(SUM(amount),0) AS total FROM extra_income WHERE clinic_id = ? AND DATE(income_date) = CURDATE()`,
-      [clinicId]
+      `SELECT IFNULL(SUM(amount),0) AS total FROM extra_income WHERE clinic_id = ? AND DATE(COALESCE(created_at, income_date)) = ?`,
+      [clinicId, today]
     );
     res.json(rows[0]);
   } catch (error) {
@@ -110,12 +112,13 @@ exports.getTodayIncome = async (req, res) => {
 exports.getTodayIncomeSummary = async (req, res) => {
   try {
     const clinicId = req.user?.clinic_id ?? 1;
+    const today = dayjs().tz("Asia/Kolkata").format("YYYY-MM-DD");
+    
     const [rows] = await db.query(
       `SELECT IFNULL(SUM(CASE WHEN income_type='CT' THEN amount ELSE 0 END), 0) AS ct_income,
-              IFNULL(SUM(CASE WHEN income_type='USG' THEN amount ELSE 0 END), 0) AS usg_income,
-              IFNULL(SUM(CASE WHEN income_type='Other' THEN amount ELSE 0 END), 0) AS other_income,
+              IFNULL(SUM(CASE WHEN income_type='USG' THEN amount ELSE 0 END), 0) AS usg_income,              IFNULL(SUM(CASE WHEN income_type='XRAY' THEN amount ELSE 0 END), 0) AS xray_income,              IFNULL(SUM(CASE WHEN income_type='Other' THEN amount ELSE 0 END), 0) AS other_income,
               IFNULL(SUM(amount), 0) AS total_income
-       FROM extra_income WHERE clinic_id = ? AND DATE(income_date) = CURDATE()`,
+       FROM extra_income WHERE clinic_id = ? AND DATE(COALESCE(created_at, income_date)) = ?`,
       [clinicId]
     );
     res.json(rows[0]);
