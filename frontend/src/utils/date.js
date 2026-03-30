@@ -8,13 +8,13 @@ dayjs.extend(timezone);
 export const formatDateTime = (date) => {
   if (!date) return "-";
   // Backend sends IST strings already, parse directly in IST timezone
-  return dayjs(date).tz("Asia/Kolkata").format("DD MMM YYYY, hh:mm A");
+  return dayjs(date).tz("Asia/Kolkata").format("DD MM YYYY, hh:mm A");
 };
 
 export const formatDate = (date) => {
   if (!date) return "-";
   // Backend sends IST strings already, parse directly in IST timezone
-  return dayjs(date).tz("Asia/Kolkata").format("YYYY-MM-DD");
+  return dayjs(date).tz("Asia/Kolkata").format("DD-MM-YYYY");
 };
 
 export const formatTime = (date) => {

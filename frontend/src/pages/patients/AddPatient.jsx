@@ -31,7 +31,7 @@ import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
 import { LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 
-import { createPatient } from "../../api/patientApi";
+import { createPatient, getNextPatientId } from "../../api/patientApi";
 import { scanPrices, usgScans, ctScans } from "../../utils/scanPrices";
 import { playSound } from "../../utils/soundUtils";
 import AddIcon from "@mui/icons-material/Add";
@@ -39,9 +39,10 @@ import DeleteIcon from "@mui/icons-material/Delete";
 
 const schema = yup.object().shape({
   patient_name: yup.string().required("Patient name required"),
-  age: yup.number().typeError("Age must be number").required(),
-  gender: yup.string().required(),
-  mobile: yup.string().required(),
+  age: yup.number().typeError("Age must be number").required("Age required").positive("Age must be positive"),
+  age_unit: yup.string().required("Age unit required"),
+  gender: yup.string().required("Gender required"),
+  mobile: yup.string().required("Mobile required"),
   address: yup.string().max(255, "Address is too long"),
   scans: yup.array().of(
     yup.object().shape({
@@ -51,7 +52,7 @@ const schema = yup.object().shape({
       amount: yup.number().typeError("Amount must be number").required("Amount required")
     })
   ).min(1, "At least one scan is required"),
-  upload_date: yup.date().required()
+  upload_date: yup.date().required("Upload date required")
 });
 const fadeSlide = keyframes`
   0% {
@@ -86,6 +87,7 @@ const AddPatient = () => {
   const [popupType, setPopupType] = useState(""); // success | error
   const [loading, setLoading] = useState(false);
   const [currentDateTime, setCurrentDateTime] = useState(dayjs());
+  const [nextPatientId, setNextPatientId] = useState(null);
 
   const [doctorOptions, setDoctorOptions] = useState(() => {
     const saved = localStorage.getItem("doctors");
@@ -107,6 +109,7 @@ const AddPatient = () => {
     defaultValues: {
       patient_name: "",
       age: "",
+      age_unit: "years",
       gender: "",
       mobile: "",
       address: "",
@@ -143,6 +146,18 @@ const totalAmount = useMemo(() => {
       setCurrentDateTime(dayjs());
     }, 1000);
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const fetchNextId = async () => {
+      try {
+        const response = await getNextPatientId();
+        setNextPatientId(response.nextId);
+      } catch (error) {
+        console.error("Error fetching next patient ID:", error);
+      }
+    };
+    fetchNextId();
   }, []);
 
   useEffect(() => {
@@ -192,10 +207,15 @@ useEffect(() => {
       setOpenPopup(true);
       playSound("success");
 
+      // Refresh next patient ID
+      const response = await getNextPatientId();
+      setNextPatientId(response.nextId);
+
       // Reset form
       reset({
         patient_name: "",
         age: "",
+        age_unit: "years",
         gender: "",
         mobile: "",
         address: "",
@@ -329,7 +349,7 @@ useEffect(() => {
                   </Box>
 
                   {/* Age */}
-                  <Box sx={{ flex: 2, minWidth: 120 }}>
+                  <Box sx={{ flex: 1.5, minWidth: 90 }}>
                     <Controller
                       name="age"
                       control={control}
@@ -343,6 +363,28 @@ useEffect(() => {
                           error={!!errors.age}
                           helperText={errors.age?.message}
                         />
+                      )}
+                    />
+                  </Box>
+
+                  {/* Age Unit */}
+                  <Box sx={{ flex: 1.5, minWidth: 100 }}>
+                    <Controller
+                      name="age_unit"
+                      control={control}
+                      render={({ field }) => (
+                        <TextField
+                          {...field}
+                          select
+                          label="Unit"
+                          fullWidth
+                          size="small"
+                          error={!!errors.age_unit}
+                          helperText={errors.age_unit?.message}
+                        >
+                          <MenuItem value="years">Years</MenuItem>
+                          <MenuItem value="months">Months</MenuItem>
+                        </TextField>
                       )}
                     />
                   </Box>
@@ -434,7 +476,7 @@ useEffect(() => {
                         mr: 1
                       }}
                     />
-                    Scan Details ({fields.length} scan{fields.length !== 1 ? 's' : ''})
+                    Scan Details (Patient ID: <Box component="span" sx={{ fontWeight: 'bold', color: '#ff6b6b', ml: 0.5 }}>{nextPatientId || "-"}</Box>) - {fields.length} scan{fields.length !== 1 ? 's' : ''}
                   </Typography>
                   <Button
                     startIcon={<AddIcon />}
@@ -484,9 +526,24 @@ useEffect(() => {
                       </IconButton>
                     )}
 
-                    <Typography variant="subtitle2" sx={{ mb: 1, color: '#ff8800', fontWeight: 'bold' }}>
-                      Scan {index + 1}
-                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                      <Typography variant="subtitle2" sx={{ color: '#ff8800', fontWeight: 'bold' }}>
+                        Scan {index + 1}
+                      </Typography>
+                      {nextPatientId && (
+                        <Box sx={{ 
+                          backgroundColor: '#ff6b6b', 
+                          color: '#fff', 
+                          px: 1, 
+                          py: 0.5, 
+                          borderRadius: 1,
+                          fontWeight: 'bold',
+                          fontSize: '0.9rem'
+                        }}>
+                          ID: {nextPatientId}
+                        </Box>
+                      )}
+                    </Box>
 
                     <Grid container spacing={2}>
                       {/* Scan Type */}

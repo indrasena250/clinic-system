@@ -109,6 +109,7 @@ router.post("/add", protect, authorize("admin", "staff"), async (req, res) => {
       upload_date,
       patient_name,
       age,
+      age_unit,
       gender,
       mobile,
       address,
@@ -146,16 +147,25 @@ for (const scan of scans) {
       dayjs().format("HH:mm:ss");
   }
 
+  // Get next clinic-specific ID
+  const [maxIdResult] = await connection.query(
+    `SELECT COALESCE(MAX(clinic_patient_id), 0) AS max_id FROM patients WHERE clinic_id = ?`,
+    [clinicId]
+  );
+  const nextClinicId = (maxIdResult[0]?.max_id || 0) + 1;
+
   const [result] = await connection.query(
     `INSERT INTO patients
-    (clinic_id, patient_name, age, gender, mobile, address,
+    (clinic_id, clinic_patient_id, patient_name, age, age_unit, gender, mobile, address,
      scan_category, scan_name, referred_doctor, amount,
      upload_date, created_at, invoice_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       clinicId,
+      nextClinicId,
       patient_name,
       age,
+      age_unit || "years",
       gender,
       mobile,
       address || null,
@@ -210,6 +220,25 @@ router.get("/all", protect, authorize("admin", "staff"), async (req, res) => {
     res.status(500).json({ message: "Failed to fetch patients" });
   }
 });
+
+/* =========================================
+   GET NEXT PATIENT ID FOR CLINIC
+========================================= */
+router.get("/next-id", protect, authorize("admin", "staff"), async (req, res) => {
+  try {
+    const clinicId = req.user?.clinic_id ?? 1;
+    const [rows] = await db.query(
+      `SELECT COUNT(*) AS patient_count FROM patients WHERE clinic_id = ?`,
+      [clinicId]
+    );
+    const nextId = (rows[0]?.patient_count || 0) + 1;
+    res.json({ nextId });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Failed to get next ID" });
+  }
+});
+
 /* =========================================
    GET CT PATIENTS ONLY
 ========================================= */
@@ -217,7 +246,9 @@ router.get("/ct", protect, authorize("admin", "staff"), async (req, res) => {
     try {
         const clinicId = req.user?.clinic_id ?? 1;
         const [rows] = await db.query(
-            `SELECT * FROM patients WHERE clinic_id = ? AND scan_category = 'CT' ORDER BY upload_date DESC, id DESC`,
+            `SELECT *,
+             ROW_NUMBER() OVER (PARTITION BY clinic_id ORDER BY upload_date DESC, id DESC) AS clinic_wise_id
+             FROM patients WHERE clinic_id = ? AND scan_category = 'CT' ORDER BY upload_date DESC, id DESC`,
             [clinicId]
         );
         res.json(rows);
@@ -234,7 +265,9 @@ router.get("/ultrasound", protect, authorize("admin", "staff"), async (req, res)
     try {
         const clinicId = req.user?.clinic_id ?? 1;
         const [rows] = await db.query(
-            `SELECT * FROM patients WHERE clinic_id = ? AND scan_category = 'Ultrasound' ORDER BY upload_date DESC, id DESC`,
+            `SELECT *,
+             ROW_NUMBER() OVER (PARTITION BY clinic_id ORDER BY upload_date DESC, id DESC) AS clinic_wise_id
+             FROM patients WHERE clinic_id = ? AND scan_category = 'Ultrasound' ORDER BY upload_date DESC, id DESC`,
             [clinicId]
         );
         res.json(rows);

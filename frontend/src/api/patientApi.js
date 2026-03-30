@@ -74,3 +74,8 @@ export const downloadInvoicePDF = async (invoiceId) => {
   });
   return res.data;
 };
+
+export const getNextPatientId = async () => {
+  const res = await API.get("/patients/next-id");
+  return res.data;
+};

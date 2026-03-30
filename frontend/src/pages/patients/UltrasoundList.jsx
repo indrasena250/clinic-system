@@ -13,6 +13,8 @@ import {
   Box,
   Chip,
   MenuItem,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import EditIcon from "@mui/icons-material/Edit";
@@ -40,6 +42,9 @@ const UltrasoundList = () => {
   const [filterRange, setFilterRange] = useState("today");
   const [searchTerm, setSearchTerm] = useState("");
 
+  const theme = useTheme();
+  const isMd = useMediaQuery(theme.breakpoints.down("md"));
+
   const loadData = async () => {
     setLoading(true);
     setError("");
@@ -48,11 +53,12 @@ const UltrasoundList = () => {
       const data = await fetchUltrasoundPatients();
 
       const mappedRows = data.map((item, index) => ({
-        slno: index + 1,
-        id: item.id,
+        slno: item.clinic_wise_id || index + 1,
+        id: item.clinic_patient_id || item.id,
+        database_id: item.id,
         invoice_id: item.invoice_id,
         patient_name: item.patient_name,
-        age: item.age,
+        age: item.age && item.age_unit ? `${item.age}${item.age_unit === 'months' ? 'M' : 'Y'}` : item.age,
         gender: item.gender,
         mobile: item.mobile,
         address: item.address,
@@ -175,7 +181,8 @@ const UltrasoundList = () => {
 
     const messageLines = [
       `${CENTER_NAME}`,
-      "Hello!",
+      "",
+      `Hello! Below are the invoice details of ${name}:`,
       "",
       "Patient Details:",
       `Name: ${name}`,
@@ -255,15 +262,16 @@ const UltrasoundList = () => {
     {
       field: "slno",
       headerName: "SL No",
-      width: 50,
+      flex: 0.35,
+      minWidth: 50,
       align: "left",
       headerAlign: "left",
     },
-    { field: "id", headerName: "ID", width: 60, align: "left", headerAlign: "left" },
     {
       field: "upload_date",
       headerName: "Date & Time",
-      width: 160,
+      flex: 1.4,
+      minWidth: 140,
       align: "left",
       headerAlign: "left",
       renderCell: (params) => (
@@ -285,13 +293,35 @@ const UltrasoundList = () => {
         </Box>
       ),
     },
-    { field: "patient_name", headerName: "Patient Name", width: 120, align: "left", headerAlign: "left" },
-    { field: "age", headerName: "Age", width: 50, align: "left", headerAlign: "left" },
-    { field: "gender", headerName: "Gender", width: 70, align: "left", headerAlign: "left" },
+    {
+      field: "id",
+      headerName: "ID",
+      flex: 0.5,
+      minWidth: 70,
+      align: "left",
+      headerAlign: "left",
+    },
+    { field: "patient_name", headerName: "Patient Name", flex: 1.5, minWidth: 110, align: "left", headerAlign: "left" },
+    { field: "age", headerName: "Age", flex: 0.4, minWidth: 48, align: "left", headerAlign: "left" },
+    { field: "gender", headerName: "Gender", flex: 0.6, minWidth: 70, align: "left", headerAlign: "left" },
+    {
+      field: "scan_category",
+      headerName: "Scan Category",
+      flex: 1,
+      minWidth: 110,
+      align: "left",
+      headerAlign: "left",
+      renderCell: (params) => (
+        <Typography sx={{ fontSize: 14, whiteSpace: "normal", wordBreak: "break-word" }}>
+          {params.value || "-"}
+        </Typography>
+      ),
+    },
     {
       field: "scan_name",
       headerName: "Scan Name",
-      width: 110,
+      flex: 1.2,
+      minWidth: 110,
       align: "left",
       headerAlign: "left",
       renderCell: (params) => (
@@ -300,11 +330,11 @@ const UltrasoundList = () => {
         </Typography>
       ),
     },
-    
     {
       field: "referred_doctor",
-      headerName: "Refferal Doctor",
-      width: 100,
+      headerName: "Referral Doctor",
+      flex: 1.2,
+      minWidth: 120,
       align: "left",
       headerAlign: "left",
       renderCell: (params) => (
@@ -313,11 +343,12 @@ const UltrasoundList = () => {
         </Typography>
       ),
     },
-    { field: "mobile", headerName: "Mobile", width: 110, align: "left", headerAlign: "left" },
+    { field: "mobile", headerName: "Mobile", flex: 0.85, minWidth: 100, align: "left", headerAlign: "left" },
     {
       field: "address",
       headerName: "Address",
-      width: 110,
+      flex: 1.3,
+      minWidth: 120,
       align: "left",
       headerAlign: "left",
       renderCell: (params) => (
@@ -329,7 +360,8 @@ const UltrasoundList = () => {
     {
       field: "amount",
       headerName: "Amount",
-      width: 85,
+      flex: 0.75,
+      minWidth: 75,
       align: "left",
       headerAlign: "left",
       renderCell: (params) => `₹ ${params.value}`,
@@ -337,19 +369,20 @@ const UltrasoundList = () => {
     {
       field: "tools",
       headerName: "Actions",
-      width: 120,
+      flex: 1,
+      minWidth: 120,
       sortable: false,
       filterable: false,
       align: "left",
       headerAlign: "left",
       renderCell: (params) => (
-        <Box sx={{ 
-          display: "flex", 
-          flexDirection: "row", 
-          gap: 1, 
-          alignItems: "center", 
-          justifyContent: "flex-start", 
-          width: "100%"
+        <Box sx={{
+          display: "flex",
+          flexDirection: "row",
+          gap: 1,
+          alignItems: "center",
+          justifyContent: "flex-start",
+          width: "100%",
         }}>
           <IconButton
             color="success"
@@ -461,40 +494,82 @@ const UltrasoundList = () => {
 
       {error && <Alert severity="error">{error}</Alert>}
 
-      <div style={{ height: 500, width: "100%" }}>
-        <DataGrid
-          rows={filteredRows}
-          columns={columns}
-          loading={loading}
-          pageSizeOptions={[5, 10, 20]}
-          initialState={{
-            pagination: { paginationModel: { pageSize: 10, page: 0 } },
-          }}
-          getRowHeight={() => "auto"}
-          sx={{
-            "& .MuiDataGrid-cell": {
-              whiteSpace: "normal !important",
-              wordBreak: "break-word",
-              lineHeight: 1.3,
-              px: 0.5,
-              py: 0.5,
-              display: "flex",
-              alignItems: "center",
-            },
-            "& .MuiDataGrid-row": {
-              maxHeight: "none !important",
-              "&:hover": {
-                backgroundColor: "#f5f5f5",
-              }
-            },
-            "& .MuiDataGrid-columnHeader": {
-              px: 0.5,
-              backgroundColor: "#f0f0f0",
-              fontWeight: "bold",
-            },
-          }}
-        />
-      </div>
+      {isMd ? (
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+          {filteredRows.map((row) => (
+            <Paper key={row.id} sx={{ p: 2, borderRadius: 2 }}>
+              <Box sx={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 1 }}>
+                <Typography variant="subtitle2" fontWeight="bold">
+                  {row.patient_name || "-"}
+                </Typography>
+                <Typography variant="caption">
+                  #{row.slno} • {row.upload_date ? formatDateTime(row.upload_date) : "-"}
+                </Typography>
+              </Box>
+              <Typography variant="body2" sx={{ mt: 0.5 }}>
+                Scan: {row.scan_category || "-"} / {row.scan_name || "-"}
+              </Typography>
+              <Typography variant="body2">Doctor: {row.referred_doctor || "-"}</Typography>
+              <Typography variant="body2">Mobile: {row.mobile || "-"}</Typography>
+              <Typography variant="body2">Address: {row.address || "-"}</Typography>
+              <Typography variant="body2" sx={{ fontWeight: "bold" }}>
+                Amount: ₹{row.amount || 0}
+              </Typography>
+              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, mt: 1 }}>
+                <IconButton color="success" title="Download Invoice" size="small" onClick={() => handleDownloadInvoice(row.invoice_id)}>
+                  <FileDownloadIcon fontSize="small" />
+                </IconButton>
+                <IconButton color="info" title="Send via WhatsApp" size="small" onClick={() => handleSendWhatsApp(row)} sx={{ color: "#25D366" }}>
+                  <SendIcon fontSize="small" />
+                </IconButton>
+                <IconButton color="primary" title="Edit" size="small" onClick={() => handleEditClick(row)}>
+                  <EditIcon fontSize="small" />
+                </IconButton>
+              </Box>
+            </Paper>
+          ))}
+        </Box>
+      ) : (
+        <div style={{ height: 500, width: "100%" }}>
+          <DataGrid
+            rows={filteredRows}
+            columns={columns}
+            loading={loading}
+            pageSizeOptions={[5, 10, 20]}
+            initialState={{
+              pagination: { paginationModel: { pageSize: 10, page: 0 } },
+            }}
+            getRowHeight={() => "auto"}
+            autoHeight
+            disableSelectionOnClick
+            sx={{
+              "& .MuiDataGrid-virtualScroller": {
+                overflowX: "hidden !important",
+              },
+              "& .MuiDataGrid-cell": {
+                whiteSpace: "normal !important",
+                wordBreak: "break-word",
+                lineHeight: 1.3,
+                px: 0.5,
+                py: 0.5,
+                display: "flex",
+                alignItems: "center",
+              },
+              "& .MuiDataGrid-row": {
+                maxHeight: "none !important",
+                "&:hover": {
+                  backgroundColor: "#f5f5f5",
+                },
+              },
+              "& .MuiDataGrid-columnHeader": {
+                px: 0.5,
+                backgroundColor: "#f0f0f0",
+                fontWeight: "bold",
+              },
+            }}
+          />
+        </div>
+      )}
 
       {/* ==============================
          EDIT DIALOG
