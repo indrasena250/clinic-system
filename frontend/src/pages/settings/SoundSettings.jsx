@@ -14,13 +14,18 @@ import {
   FormLabel,
   Alert,
   Divider,
-  Chip
+  Chip,
+  useTheme,
+  useMediaQuery
 } from "@mui/material";
 import { VolumeUp, PlayArrow, Stop } from "@mui/icons-material";
 
 const SoundSettings = () => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+
   const [selectedSuccessSound, setSelectedSuccessSound] = useState(() => {
-    return localStorage.getItem("selectedSuccessSound") || "bell";
+    return localStorage.getItem("selectedSuccessSound") || "chime";
   });
   const [selectedErrorSound, setSelectedErrorSound] = useState(() => {
     return localStorage.getItem("selectedErrorSound") || "gentle";
@@ -30,7 +35,6 @@ const SoundSettings = () => {
 
   // Sound options with descriptions
   const successSounds = [
-    { id: "bell", name: "Bell Chime", description: "Classic bell sound with harmonics" },
     { id: "chime", name: "Success Chime", description: "Pleasant ascending chime" },
     { id: "notification", name: "Notification", description: "Modern notification sound" },
     { id: "celebration", name: "Celebration", description: "Joyful celebration sound" },

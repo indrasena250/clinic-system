@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Paper, Typography, Grid, TextField, Button, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions } from "@mui/material";
+import { Paper, Typography, Grid, TextField, Button, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions, Card, CardContent, Stack, useTheme, useMediaQuery } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 
 import { getIncome, addIncome, updateIncome } from "../../api/incomeApi";
@@ -11,6 +11,8 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 
 const ExtraIncome = () => {
+ const theme = useTheme();
+ const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
  const [rows, setRows] = useState([]);
  const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -162,7 +164,7 @@ const handleEditClose = () => {
 
    <Grid container spacing={2} sx={{ mb: 3 }}>
 
-    <Grid item xs={2}>
+    <Grid item xs={12} sm={2}>
      <TextField
       type="date"
       label="Date"
@@ -171,10 +173,11 @@ const handleEditClose = () => {
       onChange={handleChange}
       fullWidth
       InputLabelProps={{ shrink: true }}
+      size={isMobile ? "small" : "medium"}
      />
     </Grid>
 
-    <Grid item xs={2}>
+    <Grid item xs={12} sm={2}>
       <TextField
         select
         label="Income Type"
@@ -182,6 +185,7 @@ const handleEditClose = () => {
         value={form.income_type}
         onChange={handleChange}
         fullWidth
+        size={isMobile ? "small" : "medium"}
       >
         <MenuItem value="USG">USG</MenuItem>
         <MenuItem value="CT">CT</MenuItem>
@@ -190,17 +194,18 @@ const handleEditClose = () => {
       </TextField>
     </Grid>
 
-    <Grid item xs={4}>
+    <Grid item xs={12} sm={4}>
       <TextField
         label="Description"
         name="description"
         value={form.description}
         onChange={handleChange}
         fullWidth
+        size={isMobile ? "small" : "medium"}
       />
     </Grid>
 
-    <Grid item xs={2}>
+    <Grid item xs={12} sm={2}>
      <TextField
       type="number"
       label="Amount"
@@ -208,14 +213,16 @@ const handleEditClose = () => {
       value={form.amount}
       onChange={handleChange}
       fullWidth
+      size={isMobile ? "small" : "medium"}
       />
     </Grid>
 
-    <Grid item xs={2}>
+    <Grid item xs={12} sm={2}>
      <Button
       variant="contained"
       fullWidth
       onClick={handleAdd}
+      size={isMobile ? "medium" : "large"}
      >
       Add
      </Button>
@@ -223,13 +230,38 @@ const handleEditClose = () => {
 
    </Grid>
 
-   <div style={{ height: 400 }}>
-    <DataGrid
-     rows={rows}
-     columns={columns}
-     pageSize={5}
-    />
-   </div>
+   {isMobile ? (
+     <Stack spacing={2}>
+       {rows.map((row) => (
+         <Card
+           key={row.id}
+           sx={{
+             borderRadius: 2,
+             boxShadow: "0 8px 18px rgba(0,0,0,0.12)",
+             p: 1,
+             border: "1px solid rgba(0,0,0,0.08)",
+             background: "linear-gradient(135deg, #fff 0%, #f7f8ff 100%)"
+           }}
+         >
+           <CardContent>
+             <Typography sx={{ fontWeight: 700 }}>{row.income_type}</Typography>
+             <Typography sx={{ fontSize: 14, color: "#414752" }}>{row.description}</Typography>
+             <Typography sx={{ fontSize: 14 }}><strong>Date:</strong> {row.income_date}</Typography>
+             <Typography sx={{ fontSize: 14, mt: 0.5 }}><strong>Amount:</strong> ₹{row.amount}</Typography>
+             <Button variant="outlined" size="small" sx={{ mt: 1 }} onClick={() => handleEdit(row)}>Edit</Button>
+           </CardContent>
+         </Card>
+       ))}
+     </Stack>
+   ) : (
+     <div style={{ height: 400 }}>
+      <DataGrid
+       rows={rows}
+       columns={columns}
+       pageSize={5}
+      />
+     </div>
+   )}
 
    {/* Edit Modal */}
    <Dialog open={editDialogOpen} onClose={handleEditClose} maxWidth="sm" fullWidth>

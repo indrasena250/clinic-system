@@ -15,12 +15,19 @@ import {
   MenuItem,
   useMediaQuery,
   useTheme,
+  Card,
+  CardContent,
+  Grid,
+  Autocomplete,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import EditIcon from "@mui/icons-material/Edit";
 import FileDownloadIcon from "@mui/icons-material/FileDownload";
 import SendIcon from "@mui/icons-material/Send";
 import ClearIcon from "@mui/icons-material/Clear";
+import PersonIcon from "@mui/icons-material/Person";
+import PhoneIcon from "@mui/icons-material/Phone";
+import LocationOnIcon from "@mui/icons-material/LocationOn";
 import { fetchCTPatients, updatePatient, downloadInvoicePDF, fetchInvoiceScans } from "../../api/patientApi";
 import API from "../../api/axios";
 import dayjs from "dayjs";
@@ -41,6 +48,10 @@ const CTList = () => {
 
   const [filterRange, setFilterRange] = useState("today");
   const [searchTerm, setSearchTerm] = useState("");
+  const [doctorOptions, setDoctorOptions] = useState(() => {
+    const saved = localStorage.getItem("doctors");
+    return saved ? JSON.parse(saved) : [];
+  });
 
   const theme = useTheme();
   const isMd = useMediaQuery(theme.breakpoints.down("md"));
@@ -57,7 +68,7 @@ const CTList = () => {
 
       const mappedRows = data.map((item, index) => ({
         slno: item.clinic_wise_id || index + 1,
-        id: item.clinic_patient_id || item.id,
+        id: item.clinic_scan_patient_id || item.clinic_patient_id || item.id,
         database_id: item.id,
         invoice_id: item.invoice_id,
         patient_name: item.patient_name,
@@ -88,7 +99,23 @@ const CTList = () => {
      EDIT HANDLERS
   ============================== */
   const handleEditClick = (row) => {
-    setEditData({ ...row });
+    // Parse age and age_unit from combined format (e.g., "5Y" -> age: 5, age_unit: "years")
+    let ageNum = row.age;
+    let ageUnit = "years";
+    
+    if (typeof row.age === "string") {
+      const match = row.age.match(/^(\d+)([YM]?)$/);
+      if (match) {
+        ageNum = parseInt(match[1], 10);
+        ageUnit = match[2] === "M" ? "months" : "years";
+      }
+    }
+
+    setEditData({ 
+      ...row, 
+      age: ageNum,
+      age_unit: ageUnit
+    });
     setOpen(true);
   };
 
@@ -100,10 +127,18 @@ const handleUpdate = async () => {
 
   try {
     const existingRow = rows.find(r => r.id === editData.id);
+    
+    // Use database_id for backend API call
+    const updateId = editData.database_id || editData.id;
+    
+    // Format age with unit
+    const ageUnit = editData.age_unit === 'months' ? 'M' : 'Y';
+    const formattedAge = `${editData.age}${ageUnit}`;
 
-    await updatePatient(editData.id, {
+    await updatePatient(updateId, {
       patient_name: editData.patient_name || existingRow.patient_name,
       age: editData.age ?? existingRow.age,
+      age_unit: editData.age_unit || "years",
       gender: editData.gender || existingRow.gender,
       mobile: editData.mobile || existingRow.mobile,
       address: editData.address ?? existingRow.address ?? null,
@@ -111,13 +146,19 @@ const handleUpdate = async () => {
       scan_name: editData.scan_name ?? existingRow.scan_name,
       referred_doctor: editData.referred_doctor ?? existingRow.referred_doctor,
       amount: editData.amount ?? existingRow.amount,
-      upload_date: dayjs.utc(existingRow.upload_date).format("YYYY-MM-DD HH:mm:ss"),
     });
+
+    // Update doctor list if new doctor added
+    if (editData.referred_doctor && !doctorOptions.includes(editData.referred_doctor)) {
+      const updated = [...doctorOptions, editData.referred_doctor];
+      setDoctorOptions(updated);
+      localStorage.setItem("doctors", JSON.stringify(updated));
+    }
 
     setRows(prev =>
       prev.map(row =>
         row.id === editData.id
-          ? { ...row, ...editData }
+          ? { ...row, ...editData, age: formattedAge }
           : row
       )
     );
@@ -179,7 +220,8 @@ const formatInvoiceMessage = (patientRow, allScans, invoiceUrl) => {
 
   const messageLines = [
     `${CENTER_NAME}`,
-    "Hello!",
+    "",
+    `Hello! The invoice details of ${name}` ,
     "",
     "Patient Details:",
     `Name: ${name}`,
@@ -235,7 +277,7 @@ const handleSendWhatsApp = async (row) => {
 
     // Open WhatsApp chat immediately on click (avoids popup blockers).
     const baseUrl = (import.meta.env.VITE_PUBLIC_API_BASE_URL || API.defaults.baseURL).replace(/\/+$/, "");
-    const invoiceUrl = `${baseUrl}/patients/invoice/public/${row.invoice_id}`;
+    const invoiceUrl = `${baseUrl}/patients/invoice/public/${row.invoice_id}?download=1`;
     const message = formatInvoiceMessage(row, allScans, invoiceUrl);
     console.log("WhatsApp message:", message);
 
@@ -480,39 +522,178 @@ const handleSendWhatsApp = async (row) => {
       {error && <Alert severity="error">{error}</Alert>}
 
       {isMd ? (
-        <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 2, px: 1 }}>
           {filteredRows.map((row) => (
-            <Paper key={row.id} sx={{ p: 2, borderRadius: 2 }}>
-              <Box sx={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 1 }}>
-                <Typography variant="subtitle2" fontWeight="bold">
-                  {row.patient_name || "-"}
-                </Typography>
-                <Typography variant="caption">
-                  #{row.slno} • {row.upload_date ? formatDateTime(row.upload_date) : "-"}
-                </Typography>
+            <Card key={row.id} sx={{
+              borderRadius: 3,
+              boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
+              border: "1px solid rgba(255,107,107,0.1)",
+              background: "linear-gradient(135deg, #ffffff 0%, #fafafa 100%)",
+              overflow: "hidden",
+              transition: "all 0.3s ease",
+              "&:hover": {
+                transform: "translateY(-2px)",
+                boxShadow: "0 8px 30px rgba(0,0,0,0.12)",
+              }
+            }}>
+              {/* Header Section */}
+              <Box sx={{
+                background: "linear-gradient(135deg, #0933f0 0%, #8d23f7 100%)",
+                color: "white",
+                p: 2,
+                position: "relative"
+              }}>
+                <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <Box sx={{ flex: 1 }}>
+                    <Typography variant="h6" sx={{ fontWeight: 700, fontSize: "1.1rem", mb: 0.5 }}>
+                      {row.patient_name || "-"}
+                    </Typography>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                      <Chip
+                        label={`ID: ${row.id}`}
+                        size="small"
+                        sx={{
+                          backgroundColor: "rgba(255,255,255,0.2)",
+                          color: "white",
+                          fontWeight: "bold",
+                          fontSize: "0.75rem"
+                        }}
+                      />
+                      <Typography variant="caption" sx={{ opacity: 0.9 }}>
+                        SL: #{row.slno}
+                      </Typography>
+                    </Box>
+                  </Box>
+                  <Box sx={{ textAlign: "right" }}>
+                    <Typography variant="body2" sx={{ opacity: 0.9, fontSize: "0.8rem" }}>
+                      {row.upload_date ? formatDateTime(row.upload_date) : "-"}
+                    </Typography>
+                  </Box>
+                </Box>
               </Box>
-              <Typography variant="body2" sx={{ mt: 0.5 }}>
-                Scan: {row.scan_name || "-"}
-              </Typography>
-              <Typography variant="body2">Doctor: {row.referred_doctor || "-"}</Typography>
-              <Typography variant="body2">Gender: {row.gender || "-"}</Typography>
-              <Typography variant="body2">Mobile: {row.mobile || "-"}</Typography>
-              <Typography variant="body2">Address: {row.address || "-"}</Typography>
-              <Typography variant="body2" sx={{ fontWeight: "bold" }}>
-                Amount: ₹{row.amount || 0}
-              </Typography>
-              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, mt: 1 }}>
-                <IconButton color="success" title="Download Invoice" size="small" onClick={() => handleDownloadInvoice(row.invoice_id)}>
-                  <FileDownloadIcon fontSize="small" />
-                </IconButton>
-                <IconButton color="info" title="Send via WhatsApp" size="small" onClick={() => handleSendWhatsApp(row)} sx={{ color: "#25D366" }}>
-                  <SendIcon fontSize="small" />
-                </IconButton>
-                <IconButton color="primary" title="Edit" size="small" onClick={() => handleEditClick(row)}>
-                  <EditIcon fontSize="small" />
-                </IconButton>
-              </Box>
-            </Paper>
+
+              {/* Content Section */}
+              <CardContent sx={{ p: 2 }}>
+                <Grid container spacing={2}>
+                  {/* Scan Details */}
+                  <Grid item xs={12}>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
+                      <Box sx={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: "50%",
+                        backgroundColor: "#ff6b6b"
+                      }} />
+                      <Typography variant="subtitle2" sx={{ fontWeight: 600, color: "#333" }}>
+                        Scan Details
+                      </Typography>
+                    </Box>
+                    <Typography variant="body1" sx={{ fontWeight: 500, color: "#555" }}>
+                      {row.scan_name || "-"}
+                    </Typography>
+                  </Grid>
+
+                  {/* Doctor & Patient Info */}
+                  <Grid item xs={6}>
+                    <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                        <PersonIcon sx={{ fontSize: 16, color: "#666" }} />
+                        <Typography variant="body2" sx={{ color: "#666" }}>
+                          {row.referred_doctor || "-"}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                          {row.gender || "-"}, {row.age || "-"}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </Grid>
+
+                  <Grid item xs={6}>
+                    <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                        <PhoneIcon sx={{ fontSize: 16, color: "#666" }} />
+                        <Typography variant="body2" sx={{ color: "#666" }}>
+                          {row.mobile || "-"}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                        <LocationOnIcon sx={{ fontSize: 16, color: "#666" }} />
+                        <Typography variant="body2" sx={{ color: "#666" }}>
+                          {row.address || "-"}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </Grid>
+                </Grid>
+
+                {/* Amount & Actions */}
+                <Box sx={{
+                  mt: 2,
+                  pt: 2,
+                  borderTop: "1px solid rgba(0,0,0,0.08)",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center"
+                }}>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    <Typography variant="h6" sx={{ fontWeight: 700, color: "#2e7d32" }}>
+                      ₹{row.amount || 0}
+                    </Typography>
+                    <Chip
+                      label="Paid"
+                      size="small"
+                      sx={{
+                        backgroundColor: "#4caf50",
+                        color: "white",
+                        fontSize: "0.7rem",
+                        height: "20px"
+                      }}
+                    />
+                  </Box>
+
+                  <Box sx={{ display: "flex", gap: 1 }}>
+                    <IconButton
+                      size="small"
+                      sx={{
+                        backgroundColor: "#4caf50",
+                        color: "white",
+                        "&:hover": { backgroundColor: "#45a049" }
+                      }}
+                      onClick={() => handleDownloadInvoice(row.invoice_id)}
+                      title="Download Invoice"
+                    >
+                      <FileDownloadIcon fontSize="small" />
+                    </IconButton>
+                    <IconButton
+                      size="small"
+                      sx={{
+                        backgroundColor: "#25D366",
+                        color: "white",
+                        "&:hover": { backgroundColor: "#1da851" }
+                      }}
+                      onClick={() => handleSendWhatsApp(row)}
+                      title="Send via WhatsApp"
+                    >
+                      <SendIcon fontSize="small" />
+                    </IconButton>
+                    <IconButton
+                      size="small"
+                      sx={{
+                        backgroundColor: "#2196f3",
+                        color: "white",
+                        "&:hover": { backgroundColor: "#1976d2" }
+                      }}
+                      onClick={() => handleEditClick(row)}
+                      title="Edit"
+                    >
+                      <EditIcon fontSize="small" />
+                    </IconButton>
+                  </Box>
+                </Box>
+              </CardContent>
+            </Card>
           ))}
         </Box>
       ) : (
@@ -582,17 +763,33 @@ const handleSendWhatsApp = async (row) => {
                   setEditData({ ...editData, patient_name: e.target.value })
                 }
               />
-              <TextField
-                fullWidth
-                margin="normal"
-                label="Age"
-                type="number"
-                value={editData.age ?? ""}
-                onChange={(e) =>
-                  setEditData({ ...editData, age: e.target.value })
-                }
-                inputProps={{ min: 0, max: 150 }}
-              />
+              <Box sx={{ display: "flex", gap: 2 }}>
+                <TextField
+                  fullWidth
+                  margin="normal"
+                  label="Age"
+                  type="number"
+                  value={editData.age ?? ""}
+                  onChange={(e) =>
+                    setEditData({ ...editData, age: e.target.value })
+                  }
+                  inputProps={{ min: 0, max: 150 }}
+                />
+                <TextField
+                  fullWidth
+                  margin="normal"
+                  select
+                  label="Age Unit"
+                  value={editData.age_unit || "years"}
+                  onChange={(e) =>
+                    setEditData({ ...editData, age_unit: e.target.value })
+                  }
+                  sx={{ maxWidth: "120px" }}
+                >
+                  <MenuItem value="years">Years</MenuItem>
+                  <MenuItem value="months">Months</MenuItem>
+                </TextField>
+              </Box>
               <TextField
                 fullWidth
                 margin="normal"
@@ -649,14 +846,26 @@ const handleSendWhatsApp = async (row) => {
                   setEditData({ ...editData, scan_name: e.target.value })
                 }
               />
-              <TextField
+              <Autocomplete
                 fullWidth
-                margin="normal"
-                label="Referred Doctor"
+                options={doctorOptions}
                 value={editData.referred_doctor || ""}
-                onChange={(e) =>
-                  setEditData({ ...editData, referred_doctor: e.target.value })
+                onChange={(e, value) =>
+                  setEditData({ ...editData, referred_doctor: value })
                 }
+                inputValue={editData.referred_doctor || ""}
+                onInputChange={(e, value) =>
+                  setEditData({ ...editData, referred_doctor: value })
+                }
+                freeSolo
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Referred Doctor"
+                    margin="normal"
+                    helperText="Select from list or type new doctor name"
+                  />
+                )}
               />
               <TextField
                 fullWidth

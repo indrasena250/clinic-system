@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { Paper, Typography, Grid, Card, CardContent, Button, Stack, TextField } from "@mui/material";
+import { Paper, Typography, Grid, Card, CardContent, Button, Stack, TextField, useTheme, useMediaQuery } from "@mui/material";
 
 import { getDailyReportSummary, downloadDailyReportPdf } from "../../api/reportApi";
 import dayjs from "dayjs";
@@ -12,6 +12,9 @@ dayjs.extend(timezone);
 import { formatDateTimeRange } from "../../utils/date";
 
 const DailyReport = () => {
+
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
   const [data, setData] = useState({
     ct: 0,

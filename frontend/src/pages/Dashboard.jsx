@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Grid, Typography, Alert, Box, Stack } from "@mui/material";
+import { Grid, Typography, Alert, Box, Stack, Button, useTheme, useMediaQuery } from "@mui/material";
 
 import { fetchTodaySummary } from "../api/dashboardApi";
 import Loader from "../components/loaders/Loader";
@@ -10,6 +10,8 @@ import { useAuth } from "../context/AuthContext";
 const Dashboard = () => {
 
   const { user } = useAuth();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
   const [summary, setSummary] = useState(null);
 
@@ -36,13 +38,31 @@ const Dashboard = () => {
   
   useEffect(() => {
     loadDashboard();
+
+    const timer = setInterval(() => {
+      loadDashboard();
+    }, 60000);
+
+    if (typeof window !== "undefined") {
+      window.addEventListener("settlementComplete", loadDashboard);
+    }
+
+    return () => {
+      clearInterval(timer);
+      if (typeof window !== "undefined") {
+        window.removeEventListener("settlementComplete", loadDashboard);
+      }
+    };
   }, []);
-  
+
   const handleSettlementComplete = async () => {
-    // Small delay to ensure database transaction is committed
     await new Promise(resolve => setTimeout(resolve, 500));
-    // Reload dashboard with fresh data
     loadDashboard(true);
+  };
+
+  const handleRefresh = () => {
+    setLoading(true);
+    loadDashboard();
   };
 
   if (loading) return <Loader />;
@@ -62,15 +82,21 @@ const Dashboard = () => {
           <Typography variant="h4" fontWeight="bold" gutterBottom>
             Dashboard Overview
           </Typography>
-          {user?.clinic_name && (
-            <Typography variant="body2" color="text.secondary">
-              {user.clinic_name}
-            </Typography>
-          )}
+          <Typography variant="body2" color="text.secondary" sx={{ fontSize: isMobile ? 12 : 14 }}>
+            Auto-refresh every minute. Pull-to-refresh button available.
+          </Typography>
         </Box>
+        <Button variant="contained" size={isMobile ? "small" : "medium"} onClick={handleRefresh}>
+          Refresh
+        </Button>
+        {user?.clinic_name && (
+          <Typography variant="body2" color="text.secondary">
+            {user.clinic_name}
+          </Typography>
+        )}
         <SettleButton onSettlementComplete={handleSettlementComplete} />
       </Stack>
-
+  
       <Grid container spacing={3} mt={1}>
 
         {/* TODAY ULTRASOUND INCOME = today ultrasound income - referral of ultrasound */}

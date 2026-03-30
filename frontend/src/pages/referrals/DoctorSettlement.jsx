@@ -7,6 +7,12 @@ import {
   Grid,
   Box,
   Chip,
+  Card,
+  CardContent,
+  Stack,
+  Button,
+  useTheme,
+  useMediaQuery,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import dayjs from "dayjs";
@@ -18,10 +24,12 @@ dayjs.extend(timezone);
 
 import { formatDate } from "../../utils/date";
 import { fetchDoctorSettlement, fetchDoctors } from "../../api/patientApi";
-import { Button } from "@mui/material";
+
 import { downloadSettlementPDF } from "../../api/patientApi";
 
 const DoctorSettlement = () => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
   const [doctor, setDoctor] = useState("");
   const [doctors, setDoctors] = useState([]);
@@ -233,14 +241,31 @@ const handleDownload = async () => {
 
       </Grid>
 
-      <Box sx={{ height: 520 }}>
-        <DataGrid
-          rows={filteredRows}
-          columns={columns}
-          pageSizeOptions={[10]}
-          disableRowSelectionOnClick
-        />
-      </Box>
+      {isMobile ? (
+        <Stack spacing={2}>
+          {filteredRows.map((row) => (
+            <Card key={row.id} sx={{ borderRadius: 2, boxShadow: "0 8px 16px rgba(0,0,0,0.08)", background: "linear-gradient(135deg, #ffffff 0%, #eaf1ff 100%)" }}>
+              <CardContent>
+                <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+                  {row.patient}
+                </Typography>
+                <Typography variant="body2">Date: {row.date} ({row.day})</Typography>
+                <Typography variant="body2">Scan: {row.scan}</Typography>
+                <Typography variant="body2" sx={{ mt: 1 }}><strong>Referral:</strong> ₹{row.referral}</Typography>
+              </CardContent>
+            </Card>
+          ))}
+        </Stack>
+      ) : (
+        <Box sx={{ height: 520 }}>
+          <DataGrid
+            rows={filteredRows}
+            columns={columns}
+            pageSizeOptions={[10]}
+            disableRowSelectionOnClick
+          />
+        </Box>
+      )}
 
     </Paper>
   );

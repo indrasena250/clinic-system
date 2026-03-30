@@ -79,3 +79,13 @@ export const getNextPatientId = async () => {
   const res = await API.get("/patients/next-id");
   return res.data;
 };
+
+export const getNextCTId = async () => {
+  const res = await API.get("/patients/next-id/ct");
+  return res.data;
+};
+
+export const getNextUltraId = async () => {
+  const res = await API.get("/patients/next-id/ultrasound");
+  return res.data;
+};

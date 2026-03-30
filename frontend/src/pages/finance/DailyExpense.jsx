@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Paper, Typography, TextField, Button, Grid, Dialog, DialogTitle, DialogContent, DialogActions } from "@mui/material";
+import { Paper, Typography, TextField, Button, Grid, Dialog, DialogTitle, DialogContent, DialogActions, Card, CardContent, Stack, useTheme, useMediaQuery } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import { Edit } from "@mui/icons-material";
 
@@ -17,6 +17,8 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 
 const DailyExpense = () => {
+ const theme = useTheme();
+ const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
  const [rows, setRows] = useState([]);
  const [openDialog, setOpenDialog] = useState(false);
@@ -153,61 +155,89 @@ const loadExpenses = async () => {
 
      <Grid container spacing={2} sx={{ mb: 3 }}>
 
-<Grid size={3}>
-<TextField
- type="date"
- label="Date"
- name="expense_date"
- value={form.expense_date}
- onChange={handleChange}
- fullWidth
- InputLabelProps={{ shrink: true }}
-/>
-</Grid>
+      <Grid item xs={12} sm={3}>
+        <TextField
+          type="date"
+          label="Date"
+          name="expense_date"
+          value={form.expense_date}
+          onChange={handleChange}
+          fullWidth
+          InputLabelProps={{ shrink: true }}
+          size={isMobile ? "small" : "medium"}
+        />
+      </Grid>
 
-<Grid size={5}>
-<TextField
- label="Description"
- name="description"
- value={form.description}
- onChange={handleChange}
- fullWidth
-/>
-</Grid>
+      <Grid item xs={12} sm={5}>
+        <TextField
+          label="Description"
+          name="description"
+          value={form.description}
+          onChange={handleChange}
+          fullWidth
+          size={isMobile ? "small" : "medium"}
+        />
+      </Grid>
 
-<Grid size={2}>
-<TextField
- label="Amount"
- name="amount"
- value={form.amount}
- onChange={handleChange}
- fullWidth
-/>
-</Grid>
+      <Grid item xs={12} sm={2}>
+        <TextField
+          label="Amount"
+          name="amount"
+          value={form.amount}
+          onChange={handleChange}
+          fullWidth
+          size={isMobile ? "small" : "medium"}
+        />
+      </Grid>
 
-<Grid size={2}>
-<Button
- variant="contained"
- fullWidth
- onClick={handleAdd}
->
- Add Expense
-</Button>
-</Grid>
+      <Grid item xs={12} sm={2}>
+        <Button
+          variant="contained"
+          fullWidth
+          onClick={handleAdd}
+          size={isMobile ? "medium" : "large"}
+        >
+          Add Expense
+        </Button>
+      </Grid>
 
-</Grid>
+    </Grid>
 
-     <div style={{ height: 400 }}>
-<DataGrid
- rows={rows || []}
- columns={columns}
- getRowId={(row) => row.id}
- initialState={{
-   pagination: { paginationModel: { pageSize: 5 } }
- }}
- pageSizeOptions={[5,10]}
-/>
-</div>
+      {isMobile ? (
+        <Stack spacing={2}>
+          {rows.map((row) => (
+            <Card
+              key={row.id}
+              sx={{
+                borderRadius: 2,
+                boxShadow: "0 8px 18px rgba(0,0,0,0.12)",
+                p: 1,
+                border: "1px solid rgba(0,0,0,0.08)",
+                background: "linear-gradient(135deg, #fff 0%, #f3f5ff 100%)"
+              }}
+            >
+              <CardContent>
+                <Typography sx={{ fontWeight: 700, fontSize: 16 }}>{formatDate(row.expense_date)}</Typography>
+                <Typography sx={{ fontSize: 14, color: "#414752" }}>{row.description}</Typography>
+                <Typography sx={{ fontSize: 14, mt: 1 }}><strong>Amount:</strong> ₹{row.amount}</Typography>
+                <Button variant="outlined" size="small" sx={{ mt: 1 }} onClick={() => handleEdit(row)}>Edit</Button>
+              </CardContent>
+            </Card>
+          ))}
+        </Stack>
+      ) : (
+        <div style={{ height: 400 }}>
+          <DataGrid
+            rows={rows || []}
+            columns={columns}
+            getRowId={(row) => row.id}
+            initialState={{
+              pagination: { paginationModel: { pageSize: 5 } }
+            }}
+            pageSizeOptions={[5,10]}
+          />
+        </div>
+      )}
 
       {/* Edit Dialog */}
       <Dialog open={openDialog} onClose={handleEditCancel} maxWidth="sm" fullWidth>

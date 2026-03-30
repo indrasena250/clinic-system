@@ -11,7 +11,14 @@ import {
   Box,
   Chip,
   Button,
+  Card,
+  CardContent,
+  Stack,
+  IconButton,
+  useTheme,
+  useMediaQuery,
 } from "@mui/material";
+import { Refresh } from "@mui/icons-material";
 import { DataGrid } from "@mui/x-data-grid";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
@@ -25,6 +32,8 @@ import { fetchAllPatients } from "../../api/patientApi";
 import { updateReferral } from "../../api/patientApi";
 
 const DoctorReferral = () => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
   const [rows, setRows] = useState([]);
   const [error, setError] = useState("");
@@ -35,6 +44,7 @@ const DoctorReferral = () => {
     severity: "success"
   });
   const [editingId, setEditingId] = useState(null);
+  const [editDraft, setEditDraft] = useState({ referral_amount: 0, referral_status: "Balance" });
 
   // Generate referral amount options from 0 to 1500 in increments of 100
   const referralAmountOptions = [0, ...Array.from({ length: 15 }, (_, i) => (i + 1) * 100)];
@@ -45,7 +55,27 @@ const DoctorReferral = () => {
 
   useEffect(() => {
     loadPatients();
+
+    const refreshInterval = setInterval(() => {
+      loadPatients();
+    }, 60000);
+
+    if (typeof window !== "undefined") {
+      window.addEventListener("settlementComplete", loadPatients);
+    }
+
+    return () => {
+      clearInterval(refreshInterval);
+      if (typeof window !== "undefined") {
+        window.removeEventListener("settlementComplete", loadPatients);
+      }
+    };
   }, []);
+
+  const handleRefresh = () => {
+    setLoading(true);
+    loadPatients();
+  };
 
   const loadPatients = async () => {
     try {
@@ -311,45 +341,148 @@ const DoctorReferral = () => {
         </Alert>
       )}
 
-      <Box
-        sx={{
-          height: "auto",
-          maxHeight: "600px",
-          "& .MuiDataGrid-root": {
-            borderRadius: "8px",
-            border: "1px solid #e0e0e0",
-          },
-        }}
-      >
-        <DataGrid
-          rows={rows}
-          columns={columns}
-          loading={loading}
-          pageSizeOptions={[10, 20, 50]}
-          initialState={{
-            pagination: {
-              paginationModel: { pageSize: 10, page: 0 }
-            }
-          }}
+      {isMobile ? (
+        <Stack spacing={2}>
+          {rows.map((row) => (
+            <Card
+              key={row.id}
+              sx={{
+                borderRadius: 2,
+                boxShadow: "0 10px 20px rgba(0, 0, 0, 0.08)",
+                border: "1px solid rgba(0, 0, 0, 0.08)",
+                background: "linear-gradient(135deg, #ffffff 0%, #f8f9ff 100%)"
+              }}
+            >
+              <CardContent>
+                <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1 }}>
+                  <Typography sx={{ fontWeight: 700, fontSize: 16, color: "#0f1c6e" }}>
+                    {row.patient_name}
+                  </Typography>
+                  <Typography sx={{ fontSize: 12, color: "#65748b" }}>
+                    {formatDateTime(row.upload_date)}
+                  </Typography>
+                </Box>
+
+                <Typography sx={{ fontSize: 14, mb: 0.4 }}><strong>Scan:</strong> {row.scan_name}</Typography>
+                <Typography sx={{ fontSize: 14, mb: 0.4 }}><strong>Doctor:</strong> {row.doctor}</Typography>
+                <Typography sx={{ fontSize: 14, mb: 1 }}><strong>Scan Amount:</strong> ₹{row.amount}</Typography>
+
+                <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+                  <Chip label={`Referral: ₹${row.referral_amount}`} color="primary" size="small" />
+                  <Chip
+                    label={row.referral_status}
+                    color={row.referral_status === "Paid" ? "success" : "warning"}
+                    size="small"
+                  />
+                </Box>
+
+                <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mt: 1, flexWrap: "wrap", gap: 1 }}>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={() => {
+                      setEditingId(row.id);
+                      setEditDraft({
+                        referral_amount: row.referral_amount,
+                        referral_status: row.referral_status
+                      });
+                    }}
+                  >
+                    {editingId === row.id ? "Editing" : "Edit"}
+                  </Button>
+                  <IconButton color="primary" size="small" onClick={handleRefresh}>
+                    <Refresh fontSize="small" />
+                  </IconButton>
+                </Box>
+
+                {editingId === row.id && (
+                  <Box sx={{ mt: 1, display: "flex", flexDirection: "column", gap: 1 }}>
+                    <FormControl size="small">
+                      <Select
+                        value={editDraft.referral_amount}
+                        onChange={(e) => setEditDraft({ ...editDraft, referral_amount: Number(e.target.value) })}
+                      >
+                        {referralAmountOptions.map((amount) => (
+                          <MenuItem key={amount} value={amount}>
+                            ₹ {amount}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+
+                    <FormControl size="small">
+                      <Select
+                        value={editDraft.referral_status}
+                        onChange={(e) => setEditDraft({ ...editDraft, referral_status: e.target.value })}
+                      >
+                        <MenuItem value="Balance">Balance</MenuItem>
+                        <MenuItem value="Paid">Paid</MenuItem>
+                      </Select>
+                    </FormControl>
+
+                    <Box sx={{ display: "flex", gap: 1 }}>
+                      <Button
+                        size="small"
+                        variant="contained"
+                        onClick={async () => {
+                          await handleChange(row.id, "referral_amount", editDraft.referral_amount);
+                          await handleChange(row.id, "referral_status", editDraft.referral_status);
+                          setEditingId(null);
+                        }}
+                      >
+                        Save
+                      </Button>
+                      <Button size="small" variant="outlined" onClick={() => setEditingId(null)}>
+                        Cancel
+                      </Button>
+                    </Box>
+                  </Box>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </Stack>
+      ) : (
+        <Box
           sx={{
-            "& .MuiDataGrid-columnHeader": {
-              backgroundColor: "#f5f5f5",
-              fontWeight: "600",
-              fontSize: "14px",
-            },
-            "& .MuiDataGrid-cell": {
-              fontSize: "14px",
-              py: 1.5,
-            },
-            "& .MuiDataGrid-row": {
-              borderBottom: "1px solid #f0f0f0",
-              "&:hover": {
-                backgroundColor: "#fafafa",
-              },
+            height: "auto",
+            maxHeight: "600px",
+            "& .MuiDataGrid-root": {
+              borderRadius: "8px",
+              border: "1px solid #e0e0e0",
             },
           }}
-        />
-      </Box>
+        >
+          <DataGrid
+            rows={rows}
+            columns={columns}
+            loading={loading}
+            pageSizeOptions={[10, 20, 50]}
+            initialState={{
+              pagination: {
+                paginationModel: { pageSize: 10, page: 0 }
+              }
+            }}
+            sx={{
+              "& .MuiDataGrid-columnHeader": {
+                backgroundColor: "#f5f5f5",
+                fontWeight: "600",
+                fontSize: "14px",
+              },
+              "& .MuiDataGrid-cell": {
+                fontSize: "14px",
+                py: 1.5,
+              },
+              "& .MuiDataGrid-row": {
+                borderBottom: "1px solid #f0f0f0",
+                "&:hover": {
+                  backgroundColor: "#fafafa",
+                },
+              },
+            }}
+          />
+        </Box>
+      )}:
 
       <Snackbar
         open={snackbar.open}

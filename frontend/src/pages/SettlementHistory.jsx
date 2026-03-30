@@ -11,11 +11,19 @@ import {
   TableHead,
   TableRow,
   Chip,
+  Card,
+  CardContent,
+  Stack,
+  useTheme,
+  useMediaQuery,
 } from "@mui/material";
 import { formatDateTime, formatCurrency } from "../utils/date";
 import { fetchSettlementHistory, downloadSettlementPeriodPDF } from "../api/patientApi";
 
 const SettlementHistory = () => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+
   const [settlements, setSettlements] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -94,50 +102,81 @@ const SettlementHistory = () => {
         </Typography>
       </Box>
 
-      <TableContainer>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell><strong>Settlement ID</strong></TableCell>
-              <TableCell><strong>From Date & Time</strong></TableCell>
-              <TableCell><strong>To Date & Time</strong></TableCell>
-              <TableCell><strong>Settlement Amount</strong></TableCell>
-              <TableCell><strong>Created</strong></TableCell>
-              <TableCell><strong>Actions</strong></TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {settlements.map((settlement) => (
-              <TableRow key={settlement.id}>
-                <TableCell>#{settlement.id}</TableCell>
-                <TableCell>{formatDateTime(settlement.from_time)}</TableCell>
-                <TableCell>{formatDateTime(settlement.to_time)}</TableCell>
-                <TableCell>
-                  <Chip
-                    label={formatCurrency(settlement.amount)}
-                    color="primary"
-                    variant="outlined"
-                  />
-                </TableCell>
-                <TableCell>{formatDateTime(settlement.created_at)}</TableCell>
-                <TableCell>
-                  <Button
-                    variant="contained"
-                    size="small"
-                    onClick={() => downloadSettlementPDF(settlement.id)}
-                    sx={{
-                      textTransform: "none",
-                      fontWeight: "600",
-                    }}
-                  >
-                    Download PDF
-                  </Button>
-                </TableCell>
+      {isMobile ? (
+        <Stack spacing={2}>
+          {settlements.map((settlement) => (
+            <Card
+              key={settlement.id}
+              sx={{
+                borderRadius: 2,
+                boxShadow: "0 8px 16px rgba(0,0,0,0.12)",
+                background: "linear-gradient(135deg, #ffffff 0%, #eef3ff 100%)"
+              }}
+            >
+              <CardContent>
+                <Typography variant="subtitle1" fontWeight="bold">Settlement #{settlement.id}</Typography>
+                <Typography variant="body2">From: {formatDateTime(settlement.from_time)}</Typography>
+                <Typography variant="body2">To: {formatDateTime(settlement.to_time)}</Typography>
+                <Typography variant="body2">Created: {formatDateTime(settlement.created_at)}</Typography>
+                <Typography variant="body2" sx={{ mt: 1 }}><strong>Amount: </strong>{formatCurrency(settlement.amount)}</Typography>
+                <Button
+                  variant="contained"
+                  size="small"
+                  sx={{ mt: 1, textTransform: "none", fontWeight: 600 }}
+                  onClick={() => downloadSettlementPDF(settlement.id)}
+                >
+                  Download PDF
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </Stack>
+      ) : (
+        <TableContainer>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell><strong>Settlement ID</strong></TableCell>
+                <TableCell><strong>From Date & Time</strong></TableCell>
+                <TableCell><strong>To Date & Time</strong></TableCell>
+                <TableCell><strong>Settlement Amount</strong></TableCell>
+                <TableCell><strong>Created</strong></TableCell>
+                <TableCell><strong>Actions</strong></TableCell>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
+            </TableHead>
+            <TableBody>
+              {settlements.map((settlement) => (
+                <TableRow key={settlement.id}>
+                  <TableCell>#{settlement.id}</TableCell>
+                  <TableCell>{formatDateTime(settlement.from_time)}</TableCell>
+                  <TableCell>{formatDateTime(settlement.to_time)}</TableCell>
+                  <TableCell>
+                    <Chip
+                      label={formatCurrency(settlement.amount)}
+                      color="primary"
+                      variant="outlined"
+                    />
+                  </TableCell>
+                  <TableCell>{formatDateTime(settlement.created_at)}</TableCell>
+                  <TableCell>
+                    <Button
+                      variant="contained"
+                      size="small"
+                      onClick={() => downloadSettlementPDF(settlement.id)}
+                      sx={{
+                        textTransform: "none",
+                        fontWeight: "600",
+                      }}
+                    >
+                      Download PDF
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      )}
 
       {settlements.length === 0 && (
         <Box sx={{ textAlign: "center", py: 4 }}>

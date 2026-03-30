@@ -53,10 +53,11 @@ function getWindowForDate(date) {
   };
 }
 
-async function drawSignature(doc, pageWidth, margin) {
+async function drawSignature(doc, pageWidth, margin, clinicId) {
   try {
     const [sigResult] = await db.query(
-      "SELECT file_path FROM clinic_signature ORDER BY id DESC LIMIT 1"
+      "SELECT file_path FROM clinic_signature WHERE clinic_id = ? ORDER BY id DESC LIMIT 1",
+      [clinicId]
     );
     if (!sigResult?.length || !sigResult[0].file_path) return;
 
@@ -147,22 +148,30 @@ for (const scan of scans) {
       dayjs().format("HH:mm:ss");
   }
 
-  // Get next clinic-specific ID
-  const [maxIdResult] = await connection.query(
+  // Get next clinic-specific ID (all scans)
+  const [maxClinicIdResult] = await connection.query(
     `SELECT COALESCE(MAX(clinic_patient_id), 0) AS max_id FROM patients WHERE clinic_id = ?`,
     [clinicId]
   );
-  const nextClinicId = (maxIdResult[0]?.max_id || 0) + 1;
+  const nextClinicId = (maxClinicIdResult[0]?.max_id || 0) + 1;
+
+  // Get next scan-type specific ID (CT or Ultrasound)
+  const [maxScanTypeIdResult] = await connection.query(
+    `SELECT COALESCE(MAX(clinic_scan_patient_id), 0) AS max_id FROM patients WHERE clinic_id = ? AND scan_category = ?`,
+    [clinicId, scan.scan_category]
+  );
+  const nextScanTypeId = (maxScanTypeIdResult[0]?.max_id || 0) + 1;
 
   const [result] = await connection.query(
     `INSERT INTO patients
-    (clinic_id, clinic_patient_id, patient_name, age, age_unit, gender, mobile, address,
+    (clinic_id, clinic_patient_id, clinic_scan_patient_id, patient_name, age, age_unit, gender, mobile, address,
      scan_category, scan_name, referred_doctor, amount,
      upload_date, created_at, invoice_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       clinicId,
       nextClinicId,
+      nextScanTypeId,
       patient_name,
       age,
       age_unit || "years",
@@ -240,6 +249,42 @@ router.get("/next-id", protect, authorize("admin", "staff"), async (req, res) =>
 });
 
 /* =========================================
+   GET NEXT CT PATIENT ID FOR CLINIC
+========================================= */
+router.get("/next-id/ct", protect, authorize("admin", "staff"), async (req, res) => {
+  try {
+    const clinicId = req.user?.clinic_id ?? 1;
+    const [rows] = await db.query(
+      `SELECT COALESCE(MAX(clinic_scan_patient_id), 0) AS max_id FROM patients WHERE clinic_id = ? AND scan_category = 'CT'`,
+      [clinicId]
+    );
+    const nextId = (rows[0]?.max_id || 0) + 1;
+    res.json({ nextId });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Failed to get next CT ID" });
+  }
+});
+
+/* =========================================
+   GET NEXT ULTRASOUND PATIENT ID FOR CLINIC
+========================================= */
+router.get("/next-id/ultrasound", protect, authorize("admin", "staff"), async (req, res) => {
+  try {
+    const clinicId = req.user?.clinic_id ?? 1;
+    const [rows] = await db.query(
+      `SELECT COALESCE(MAX(clinic_scan_patient_id), 0) AS max_id FROM patients WHERE clinic_id = ? AND scan_category = 'Ultrasound'`,
+      [clinicId]
+    );
+    const nextId = (rows[0]?.max_id || 0) + 1;
+    res.json({ nextId });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Failed to get next Ultrasound ID" });
+  }
+});
+
+/* =========================================
    GET CT PATIENTS ONLY
 ========================================= */
 router.get("/ct", protect, authorize("admin", "staff"), async (req, res) => {
@@ -248,7 +293,8 @@ router.get("/ct", protect, authorize("admin", "staff"), async (req, res) => {
         const [rows] = await db.query(
             `SELECT *,
              ROW_NUMBER() OVER (PARTITION BY clinic_id ORDER BY upload_date DESC, id DESC) AS clinic_wise_id
-             FROM patients WHERE clinic_id = ? AND scan_category = 'CT' ORDER BY upload_date DESC, id DESC`,
+             FROM patients WHERE clinic_id = ? AND scan_category = 'CT' 
+             ORDER BY ISNULL(upload_date) ASC, id DESC`,
             [clinicId]
         );
         res.json(rows);
@@ -267,7 +313,8 @@ router.get("/ultrasound", protect, authorize("admin", "staff"), async (req, res)
         const [rows] = await db.query(
             `SELECT *,
              ROW_NUMBER() OVER (PARTITION BY clinic_id ORDER BY upload_date DESC, id DESC) AS clinic_wise_id
-             FROM patients WHERE clinic_id = ? AND scan_category = 'Ultrasound' ORDER BY upload_date DESC, id DESC`,
+             FROM patients WHERE clinic_id = ? AND scan_category = 'Ultrasound' 
+             ORDER BY ISNULL(upload_date) ASC, id DESC`,
             [clinicId]
         );
         res.json(rows);
@@ -276,6 +323,7 @@ router.get("/ultrasound", protect, authorize("admin", "staff"), async (req, res)
         res.status(500).json({ message: "Error fetching Ultrasound records" });
     }
 });
+
 /* =========================================
    COMPLETE DAILY FINANCIAL REPORT
 ========================================= */
@@ -437,19 +485,51 @@ router.put("/:id", protect, authorize("admin"), async (req, res) => {
     upload_date,
   } = req.body;
 
-  // If upload_date is just a date (YYYY-MM-DD), append current time
-  let finalDate = upload_date;
-  if (upload_date && upload_date.length === 10) {
-    // Only date provided, add current time
-    finalDate = dayjs(upload_date).format("YYYY-MM-DD") + " " + dayjs().format("HH:mm:ss");
+  // Only update upload_date if explicitly provided (otherwise keep original).
+  // If a date-only value is provided (YYYY-MM-DD), append current time.
+  let finalDate = null;
+  if (upload_date !== undefined && upload_date !== null && upload_date !== "") {
+    finalDate = upload_date;
+    if (typeof upload_date === "string" && upload_date.length === 10) {
+      finalDate = dayjs(upload_date).format("YYYY-MM-DD") + " " + dayjs().format("HH:mm:ss");
+    }
   }
 
   try {
+    const fields = [
+      "patient_name=?",
+      "age=?",
+      "gender=?",
+      "mobile=?",
+      "address=?",
+      "scan_category=?",
+      "scan_name=?",
+      "referred_doctor=?",
+      "amount=?",
+    ];
+
+    const values = [
+      patient_name,
+      age,
+      gender,
+      mobile,
+      address ?? null,
+      scan_category,
+      scan_name,
+      referred_doctor,
+      amount,
+    ];
+
+    if (finalDate !== null) {
+      fields.push("upload_date=?");
+      values.push(finalDate);
+    }
+
+    values.push(id, clinicId);
+
     const [r] = await pool.query(
-      `UPDATE patients SET patient_name=?, age=?, gender=?, mobile=?, address=?,
-       scan_category=?, scan_name=?, referred_doctor=?, amount=?, upload_date=?
-       WHERE id=? AND clinic_id=?`,
-      [patient_name, age, gender, mobile, address ?? null, scan_category, scan_name, referred_doctor, amount, finalDate, id, clinicId]
+      `UPDATE patients SET ${fields.join(", ")} WHERE id=? AND clinic_id=?`,
+      values
     );
     if (r.affectedRows === 0) return res.status(404).json({ message: "Patient not found" });
     res.json({ message: "Patient updated successfully" });
@@ -696,26 +776,45 @@ async (req, res) => {
 
         slNo++;
 
+        // Determine dynamic row height based on wrapped text
+        let rowHeightActual = rowHeight;
+        const textOptions = { lineBreak: true, ellipsis: true, width: 0 };
+
+        rowData.forEach((cell, i) => {
+          const availableWidth = colWidths[i] - 10;
+          textOptions.width = availableWidth;
+          const lineHeight = doc.heightOfString(String(cell), textOptions);
+          rowHeightActual = Math.max(rowHeightActual, lineHeight + 12);
+        });
+
+        if (y + rowHeightActual > pageHeight - 150) {
+          doc.addPage();
+          y = margin;
+          drawHeader();
+        }
+
         let x = startX;
 
         doc.font("Helvetica").fontSize(10);
 
         rowData.forEach((cell, i) => {
 
-          doc.rect(x, y, colWidths[i], rowHeight).stroke();
+          doc.rect(x, y, colWidths[i], rowHeightActual).stroke();
 
-          const alignRight = i === 4 ? "right" : "left";
+          // Align amount right only, keep scan column left
+          const alignRight = i === 5 ? "right" : "left";
 
           doc.text(String(cell), x + 5, y + 8, {
             width: colWidths[i] - 10,
             align: alignRight,
-            lineBreak: false
+            lineBreak: true,
+            ellipsis: true,
           });
 
           x += colWidths[i];
         });
 
-        y += rowHeight;
+        y += rowHeightActual;
       });
 
       /* ================= TOTAL ================= */
@@ -750,7 +849,7 @@ async (req, res) => {
 
       doc.moveDown(2);
 
-      await drawSignature(doc, pageWidth, margin);
+      await drawSignature(doc, pageWidth, margin, clinicId);
       doc.end();
 
     } catch (error) {
@@ -1228,7 +1327,7 @@ doc.moveTo(labelX, lineY2)
    .lineTo(pageWidth - margin, lineY2)
    .stroke();
             doc.moveDown(0.5);
-            await drawSignature(doc, pageWidth, margin);
+            await drawSignature(doc, pageWidth, margin, clinicId);
             doc.end();
 
         } catch (error) {
@@ -1561,7 +1660,7 @@ yPos += 25;
 // Bottom divider
 doc.moveTo(leftX, yPos).lineTo(pageWidth - margin, yPos).stroke();
         doc.moveDown(1);
-        await drawSignature(doc, pageWidth, margin);
+        await drawSignature(doc, pageWidth, margin, clinicId);
         doc.end();
 
     } catch (error) {
@@ -2018,21 +2117,48 @@ router.get("/invoice/pdf/:invoiceId", protect, authorize("admin", "staff"), asyn
     let currentY = tableTop + 30;
     doc.font("Helvetica").fontSize(12);
 
+    const baseRowHeight = 25;
+
     rows.forEach((row, index) => {
       const amount = Number(String(row.amount).replace(/[^\d.]/g, "")) || 0;
       const formattedAmount = amount.toFixed(2);
       const slNo = index + 1;
+      const scanText = row.scan_name || "-";
+
+      const scanTextHeight = doc.heightOfString(scanText, {
+        width: col4 - col3 - 10,
+        align: "left",
+        lineBreak: true,
+      });
+
+      const rowHeightActual = Math.max(baseRowHeight, scanTextHeight + 12);
+
+      if (currentY + rowHeightActual > doc.page.height - 50) {
+        doc.addPage();
+        currentY = tableTop + 30;
+        doc.font("Helvetica-Bold").fontSize(12);
+        doc.text("SL No", col1, tableTop);
+        doc.text("Date", col2, tableTop);
+        doc.text("Scan", col3, tableTop);
+        doc.text("Amount", col4, tableTop, { width: 60, align: "center" });
+        doc.moveTo(margin, tableTop + 18).lineTo(rightX, tableTop + 18).stroke();
+        doc.font("Helvetica").fontSize(12);
+      }
 
       doc.text(String(slNo), col1, currentY);
       doc.text(dayjs(row.upload_date).format("DD-MM-YYYY"), col2, currentY);
-      doc.text(row.scan_name || "-", col3, currentY);
-      doc.text(`Rs. ${formattedAmount}`, col4, currentY, { 
-        width: 100, 
-        align: "left", 
-        lineBreak: false 
+      doc.text(scanText, col3, currentY, {
+        width: col4 - col3 - 10,
+        align: "left",
+        lineBreak: true,
+      });
+      doc.text(`Rs. ${formattedAmount}`, col4, currentY, {
+        width: 100,
+        align: "left",
+        lineBreak: false,
       });
 
-      currentY += 25;
+      currentY += rowHeightActual;
     });
 
     doc.moveTo(margin, currentY).lineTo(rightX, currentY).stroke();
@@ -2060,7 +2186,7 @@ router.get("/invoice/pdf/:invoiceId", protect, authorize("admin", "staff"), asyn
     });
 
     // ================= SIGNATURE (COPIED FROM YOUR REPORT) =================
-    await drawSignature(doc, pageWidth, margin);
+    await drawSignature(doc, pageWidth, margin, clinicId);
     doc.end();
   } catch (err) {
     console.error(err);
@@ -2082,6 +2208,7 @@ router.get("/invoice/public/:invoiceId", async (req, res) => {
     }
 
     const patientData = rows[0];
+    const clinicId = patientData?.clinic_id ?? 1;
 
     const PDFDocument = require("pdfkit");
     const dayjs = require("dayjs");
@@ -2089,9 +2216,16 @@ router.get("/invoice/public/:invoiceId", async (req, res) => {
     const doc = new PDFDocument({ size: "A4", margin: 50 });
 
     res.setHeader("Content-Type", "application/pdf");
+
+    // WhatsApp's in-app browser often fails to "download" forced attachments.
+    // Support both modes:
+    // - default: inline (opens in browser PDF viewer)
+    // - ?download=1: attachment (forces download)
+    const invoiceFilename = `invoice-${patientData.invoice_id}.pdf`;
+    const downloadMode = String(req.query.download || "") === "1";
     res.setHeader(
       "Content-Disposition",
-      `attachment; filename=invoice-${patientData.invoice_id}.pdf`
+      `${downloadMode ? "attachment" : "inline"}; filename=${invoiceFilename}`
     );
 
     doc.pipe(res);
@@ -2186,7 +2320,7 @@ router.get("/invoice/public/:invoiceId", async (req, res) => {
     doc.text("Thank you for visiting", 0, totalY + 50, { align: "center" });
 
     // ================= SIGNATURE =================
-    await drawSignature(doc, pageWidth, margin);
+    await drawSignature(doc, pageWidth, margin, clinicId);
 
     doc.end();
   } catch (err) {

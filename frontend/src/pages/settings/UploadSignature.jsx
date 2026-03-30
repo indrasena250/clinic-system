@@ -9,13 +9,18 @@ import {
   Card,
   CardContent,
   CardMedia,
-  Grid
+  Grid,
+  useTheme,
+  useMediaQuery
 } from "@mui/material";
 import { CloudUpload, Image, Refresh, Delete } from "@mui/icons-material";
 import API from "../../api/axios";
 import { uploadSignature, getAllSignatures, deleteSignature } from "../../api/settingsApi";
 
 const UploadSignature = () => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+
   const [selectedFile, setSelectedFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [currentSignature, setCurrentSignature] = useState(null);

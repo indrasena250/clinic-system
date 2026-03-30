@@ -18,7 +18,9 @@ import {
   CardContent,
   IconButton,
   Dialog,
-  DialogContent
+  DialogContent,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 
 import { useForm, Controller, useFieldArray, useWatch } from "react-hook-form";
@@ -31,7 +33,7 @@ import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
 import { LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 
-import { createPatient, getNextPatientId } from "../../api/patientApi";
+import { createPatient, getNextPatientId, getNextCTId, getNextUltraId } from "../../api/patientApi";
 import { scanPrices, usgScans, ctScans } from "../../utils/scanPrices";
 import { playSound } from "../../utils/soundUtils";
 import AddIcon from "@mui/icons-material/Add";
@@ -43,7 +45,7 @@ const schema = yup.object().shape({
   age_unit: yup.string().required("Age unit required"),
   gender: yup.string().required("Gender required"),
   mobile: yup.string().required("Mobile required"),
-  address: yup.string().max(255, "Address is too long"),
+  address: yup.string().required("Address required").max(255, "Address is too long"),
   scans: yup.array().of(
     yup.object().shape({
       scan_category: yup.string().required("Scan type required"),
@@ -81,6 +83,10 @@ const popupScale = keyframes`
   }
 `;
 const AddPatient = () => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const isTablet = useMediaQuery(theme.breakpoints.down("md"));
+
   const [success, setSuccess] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
   const [openPopup, setOpenPopup] = useState(false);
@@ -88,6 +94,8 @@ const AddPatient = () => {
   const [loading, setLoading] = useState(false);
   const [currentDateTime, setCurrentDateTime] = useState(dayjs());
   const [nextPatientId, setNextPatientId] = useState(null);
+  const [nextCTId, setNextCTId] = useState(null);
+  const [nextUltraId, setNextUltraId] = useState(null);
 
   const [doctorOptions, setDoctorOptions] = useState(() => {
     const saved = localStorage.getItem("doctors");
@@ -149,15 +157,21 @@ const totalAmount = useMemo(() => {
   }, []);
 
   useEffect(() => {
-    const fetchNextId = async () => {
+    const fetchNextIds = async () => {
       try {
-        const response = await getNextPatientId();
-        setNextPatientId(response.nextId);
+        const [generalRes, ctRes, ultraRes] = await Promise.all([
+          getNextPatientId(),
+          getNextCTId(),
+          getNextUltraId()
+        ]);
+        setNextPatientId(generalRes.nextId);
+        setNextCTId(ctRes.nextId);
+        setNextUltraId(ultraRes.nextId);
       } catch (error) {
-        console.error("Error fetching next patient ID:", error);
+        console.error("Error fetching next patient IDs:", error);
       }
     };
-    fetchNextId();
+    fetchNextIds();
   }, []);
 
   useEffect(() => {
@@ -320,18 +334,19 @@ useEffect(() => {
                   Patient Information
                 </Typography>
 
-                {/* FLEX ROW (STABLE) */}
+                {/* FLEX ROW (RESPONSIVE) */}
                 <Box
                   sx={{
                     display: "flex",
-                    gap: 2,
+                    gap: isMobile ? 1 : 2,
                     width: "100%",
-                    flexWrap: "wrap"
+                    flexWrap: "wrap",
+                    flexDirection: isMobile ? "column" : "row"
                   }}
                 >
 
                   {/* Patient Name */}
-                  <Box sx={{ flex: 4, minWidth: 220 }}>
+                  <Box sx={{ flex: isMobile ? "none" : 3.5, minWidth: isMobile ? "100%" : 220, width: isMobile ? "100%" : "auto" }}>
                     <Controller
                       name="patient_name"
                       control={control}
@@ -340,7 +355,7 @@ useEffect(() => {
                           {...field}
                           label="Patient Name"
                           fullWidth
-                          size="small"
+                          size={isMobile ? "medium" : "small"}
                           error={!!errors.patient_name}
                           helperText={errors.patient_name?.message}
                         />
@@ -348,49 +363,55 @@ useEffect(() => {
                     />
                   </Box>
 
-                  {/* Age */}
-                  <Box sx={{ flex: 1.5, minWidth: 90 }}>
-                    <Controller
-                      name="age"
-                      control={control}
-                      render={({ field }) => (
-                        <TextField
-                          {...field}
-                          label="Age"
-                          type="number"
-                          fullWidth
-                          size="small"
-                          error={!!errors.age}
-                          helperText={errors.age?.message}
-                        />
-                      )}
-                    />
+                  {/* Age & Age Unit Row */}
+                  <Box sx={{
+                    flex: isMobile ? "none" : 3,
+                    minWidth: isMobile ? "100%" : 190,
+                    width: isMobile ? "100%" : "auto",
+                    display: "flex",
+                    gap: 1
+                  }}>
+                    <Box sx={{ flex: 2 }}>
+                      <Controller
+                        name="age"
+                        control={control}
+                        render={({ field }) => (
+                          <TextField
+                            {...field}
+                            label="Age"
+                            type="number"
+                            fullWidth
+                            size={isMobile ? "medium" : "small"}
+                            error={!!errors.age}
+                            helperText={errors.age?.message}
+                          />
+                        )}
+                      />
+                    </Box>
+                    <Box sx={{ flex: 2 }}>
+                      <Controller
+                        name="age_unit"
+                        control={control}
+                        render={({ field }) => (
+                          <TextField
+                            {...field}
+                            select
+                            label="Unit"
+                            fullWidth
+                            size={isMobile ? "medium" : "small"}
+                            error={!!errors.age_unit}
+                            helperText={errors.age_unit?.message}
+                          >
+                            <MenuItem value="years">Years</MenuItem>
+                            <MenuItem value="months">Months</MenuItem>
+                          </TextField>
+                        )}
+                      />
+                    </Box>
                   </Box>
 
-                  {/* Age Unit */}
-                  <Box sx={{ flex: 1.5, minWidth: 100 }}>
-                    <Controller
-                      name="age_unit"
-                      control={control}
-                      render={({ field }) => (
-                        <TextField
-                          {...field}
-                          select
-                          label="Unit"
-                          fullWidth
-                          size="small"
-                          error={!!errors.age_unit}
-                          helperText={errors.age_unit?.message}
-                        >
-                          <MenuItem value="years">Years</MenuItem>
-                          <MenuItem value="months">Months</MenuItem>
-                        </TextField>
-                      )}
-                    />
-                  </Box>
-
-                  {/* Gender (WIDER FIXED) */}
-                  <Box sx={{ flex: 2.5, minWidth: 150 }}>
+                  {/* Gender */}
+                  <Box sx={{ flex: isMobile ? "none" : 2.5, minWidth: isMobile ? "100%" : 150, width: isMobile ? "100%" : "auto" }}>
                     <Controller
                       name="gender"
                       control={control}
@@ -400,10 +421,7 @@ useEffect(() => {
                           select
                           label="Gender"
                           fullWidth
-                          size="small"
-                          sx={{
-                            width: "100%"
-                          }}
+                          size={isMobile ? "medium" : "small"}
                           error={!!errors.gender}
                           helperText={errors.gender?.message}
                         >
@@ -417,7 +435,7 @@ useEffect(() => {
                   </Box>
 
                   {/* Mobile */}
-                  <Box sx={{ flex: 3, minWidth: 220 }}>
+                  <Box sx={{ flex: isMobile ? "none" : 3, minWidth: isMobile ? "100%" : 220, width: isMobile ? "100%" : "auto" }}>
                     <Controller
                       name="mobile"
                       control={control}
@@ -426,14 +444,32 @@ useEffect(() => {
                           {...field}
                           label="Mobile Number"
                           fullWidth
-                          size="small"
+                          size={isMobile ? "medium" : "small"}
                           error={!!errors.mobile}
                           helperText={errors.mobile?.message}
                         />
                       )}
                     />
                   </Box>
-
+                  <Box sx={{ flex: isMobile ? "none" : 4, minWidth: isMobile ? "100%" : 220, width: isMobile ? "100%" : "auto" }}>
+                    <Controller
+                      name="address"
+                      control={control}
+                      render={({ field }) => (
+                        <TextField
+                          {...field}
+                          label="Address"
+                          fullWidth
+                          multiline
+                          minRows={1}
+                          size="small"
+                          variant="outlined"
+                          error={!!errors.address}
+                          helperText={errors.address?.message}
+                        />
+                      )}
+                    />
+                  </Box>
                 </Box>
               </CardContent>
             </Card>
@@ -476,7 +512,7 @@ useEffect(() => {
                         mr: 1
                       }}
                     />
-                    Scan Details (Patient ID: <Box component="span" sx={{ fontWeight: 'bold', color: '#ff6b6b', ml: 0.5 }}>{nextPatientId || "-"}</Box>) - {fields.length} scan{fields.length !== 1 ? 's' : ''}
+                    Scan Details
                   </Typography>
                   <Button
                     startIcon={<AddIcon />}
@@ -530,24 +566,72 @@ useEffect(() => {
                       <Typography variant="subtitle2" sx={{ color: '#ff8800', fontWeight: 'bold' }}>
                         Scan {index + 1}
                       </Typography>
-                      {nextPatientId && (
-                        <Box sx={{ 
-                          backgroundColor: '#ff6b6b', 
-                          color: '#fff', 
-                          px: 1, 
-                          py: 0.5, 
-                          borderRadius: 1,
-                          fontWeight: 'bold',
-                          fontSize: '0.9rem'
-                        }}>
-                          ID: {nextPatientId}
-                        </Box>
-                      )}
                     </Box>
 
                     <Grid container spacing={2}>
+                      {/* ID DISPLAY */}
+                      <Box
+                        sx={{
+                          flex: isMobile ? "none" : 0.5,
+                          minWidth: isMobile ? "100%" : 120,
+                          display: "flex",
+                          alignItems: "center"
+                        }}
+                      >
+                        {(() => {
+                          const scanCategory = watch(`scans.${index}.scan_category`);
+                          let scanId = null;
+
+                          const allScans = watch("scans") || [];
+
+                          // Count previous scans of same category
+                          const sameTypeCount = allScans
+                            .slice(0, index)
+                            .filter(scan => scan?.scan_category === scanCategory).length;
+
+                          if (scanCategory === 'CT' && nextCTId) {
+                            scanId = Number(nextCTId) + sameTypeCount;
+                          } 
+                          else if (scanCategory === 'Ultrasound' && nextUltraId) {
+                            scanId = Number(nextUltraId) + sameTypeCount;
+                          } 
+                          else if (!scanCategory && nextUltraId) {
+                          const sameTypeCount = watchedScans
+                            ?.slice(0, index)
+                            ?.filter(s => !s?.scan_category || s?.scan_category === '').length;
+
+                          scanId = Number(nextUltraId) + sameTypeCount;
+                        }
+
+                          return scanId && (
+                            <Box
+                              sx={{
+                                width: "100%",
+                                textAlign: "center",
+                                p: 1,
+                                borderRadius: 1,
+                                backgroundColor: "rgba(117, 216, 255, 0.18)"
+                              }}
+                            >
+                              <Typography sx={{ fontWeight: 900, fontSize: "1.1rem" }}>
+                                ID:
+                                <Box
+                                  component="span"
+                                  sx={{
+                                    color: "#d32f2f",
+                                    fontWeight: 900,
+                                    ml: 1
+                                  }}
+                                >
+                                  {scanId}
+                                </Box>
+                              </Typography>
+                            </Box>
+                          );
+                        })()}
+                      </Box>
                       {/* Scan Type */}
-                      <Box sx={{ flex: 1.5, minWidth: 150 }}>
+                      <Box sx={{ flex: isMobile ? "none" : 1.5, minWidth: isMobile ? "100%" : 150, width: isMobile ? "100%" : "auto" }}>
                         <Controller
                           name={`scans.${index}.scan_category`}
                           control={control}
@@ -557,7 +641,7 @@ useEffect(() => {
                               select
                               label="Scan Type"
                               fullWidth
-                              size="small"
+                              size={isMobile ? "medium" : "small"}
                               error={!!errors.scans?.[index]?.scan_category}
                               helperText={errors.scans?.[index]?.scan_category?.message}
                             >
@@ -570,7 +654,7 @@ useEffect(() => {
                       </Box>
 
                       {/* Scan Name */}
-                      <Box sx={{ flex: 2, minWidth: 200 }}>
+                      <Box sx={{ flex: isMobile ? "none" : 1.5, minWidth: isMobile ? "100%" : 150, width: isMobile ? "100%" : "auto" }}>
                         <Controller
                           name={`scans.${index}.scan_name`}
                           control={control}
@@ -600,7 +684,7 @@ useEffect(() => {
                                     {...params}
                                     label="Scan Name"
                                     fullWidth
-                                    size="small"
+                                    size={isMobile ? "medium" : "small"}
                                     error={!!errors.scans?.[index]?.scan_name}
                                     helperText={errors.scans?.[index]?.scan_name?.message}
                                   />
@@ -612,7 +696,7 @@ useEffect(() => {
                       </Box>
 
                       {/* Referring Doctor */}
-                      <Box sx={{ flex: 2, minWidth: 180 }}>
+                      <Box sx={{ flex: isMobile ? "none" : 1.5, minWidth: isMobile ? "100%" : 150, width: isMobile ? "100%" : "auto" }}>
                         <Controller
                           name={`scans.${index}.referred_doctor`}
                           control={control}
@@ -632,7 +716,7 @@ useEffect(() => {
                                   {...params}
                                   label="Referring Doctor"
                                   fullWidth
-                                  size="small"
+                                  size={isMobile ? "medium" : "small"}
                                   error={!!errors.scans?.[index]?.referred_doctor}
                                   helperText={errors.scans?.[index]?.referred_doctor?.message}
                                 />
@@ -656,7 +740,7 @@ useEffect(() => {
                               label="Amount (₹)"
                               type="number"
                               fullWidth
-                              size="small"
+                              size={isMobile ? "medium" : "small"}
                               error={!!errors.scans?.[index]?.amount}
                               helperText={errors.scans?.[index]?.amount?.message}
                             />
@@ -700,25 +784,7 @@ useEffect(() => {
                     />
                   </Grid>
                     
-                  <Grid item xs={12} sm={6} md={3}>
-                    <Controller
-                      name="address"
-                      control={control}
-                      render={({ field }) => (
-                        <TextField
-                          {...field}
-                          label="Address"
-                          fullWidth
-                          multiline
-                          minRows={1}
-                          size="small"
-                          variant="outlined"
-                          error={!!errors.address}
-                          helperText={errors.address?.message}
-                        />
-                      )}
-                    />
-                  </Grid>
+                  
                 
                 {/* Total Amount Display */}
                 <Grid item xs={12} sm={6} md={3}>
@@ -737,7 +803,7 @@ useEffect(() => {
                         sx={{
                           color: '#d32f2f',
                           fontWeight: 800,
-                          fontSize: '1.8rem',
+                          fontSize: '2.1rem',
                           alignment: 'right'
                         }}
                       >
