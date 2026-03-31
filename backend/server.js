@@ -89,7 +89,17 @@ app.get("/", (req, res) => {
   res.send("Clinic Management System Running...");
 });
 
-app.get("/backup", runBackup);
+app.get("/backup", (req, res, next) => {
+  const key = req.query.key;
+
+  // 🔒 SECURITY CHECK
+  if (key !== process.env.BACKUP_SECRET) {
+    return res.status(403).send("Unauthorized");
+  }
+
+  // ✅ Call your actual backup function
+  runBackup(req, res, next);
+});
 
 /* ===============================
    ERROR HANDLER
