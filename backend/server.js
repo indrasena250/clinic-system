@@ -88,6 +88,10 @@ app.get("/", (req, res) => {
   res.send("Clinic Management System Running...");
 });
 
+app.get("/backup", (req, res) => {
+  res.send("Backup route working");
+});
+
 /* ===============================
    ERROR HANDLER
 =============================== */
