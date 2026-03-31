@@ -5,6 +5,7 @@ const cors = require("cors");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const path = require("path");
+const { runBackup } = require("./backup");
 
 const app = express();
 app.set("trust proxy", 1);
@@ -88,9 +89,7 @@ app.get("/", (req, res) => {
   res.send("Clinic Management System Running...");
 });
 
-app.get("/backup", (req, res) => {
-  res.send("Backup route working");
-});
+app.get("/backup", runBackup);
 
 /* ===============================
    ERROR HANDLER

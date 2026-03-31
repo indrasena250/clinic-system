@@ -1,8 +1,8 @@
-import { exec } from "child_process";
-import nodemailer from "nodemailer";
-import fs from "fs";
+const { exec } = require("child_process");
+const nodemailer = require("nodemailer");
+const fs = require("fs");
 
-app.get("/backup", (req, res) => {
+const runBackup = (req, res) => {
   const date = new Date().toISOString().split("T")[0];
   const file = `backup-${date}.sql`;
 
@@ -44,4 +44,6 @@ app.get("/backup", (req, res) => {
       res.status(500).send("Email failed");
     }
   });
-});
+};
+
+module.exports = { runBackup };
