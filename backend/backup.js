@@ -9,33 +9,39 @@ app.get("/backup", (req, res) => {
   const dump = `mysqldump -h ${process.env.MYSQLHOST} -u ${process.env.MYSQLUSER} -p${process.env.MYSQLPASSWORD} ${process.env.MYSQLDATABASE} > ${file}`;
 
   exec(dump, async (err) => {
-    if (err) return res.status(500).send("Dump failed");
+    if (err) {
+      console.error(err);
+      return res.status(500).send("Dump failed");
+    }
 
-    // Mail setup
-    const transporter = nodemailer.createTransport({
-      service: "gmail",
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
-    });
-
-    // Send mail
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: process.env.EMAIL_USER,
-      subject: "Daily DB Backup",
-      text: "Attached is your database backup",
-      attachments: [
-        {
-          filename: file,
-          path: file,
+    try {
+      const transporter = nodemailer.createTransport({
+        service: "gmail",
+        auth: {
+          user: process.env.EMAIL_USER,
+          pass: process.env.EMAIL_PASS,
         },
-      ],
-    });
+      });
 
-    fs.unlinkSync(file);
+      await transporter.sendMail({
+        from: process.env.EMAIL_USER,
+        to: process.env.EMAIL_USER,
+        subject: `DB Backup - ${date}`,
+        text: "Your database backup is attached.",
+        attachments: [
+          {
+            filename: file,
+            path: file,
+          },
+        ],
+      });
 
-    res.send("Backup sent to email");
+      fs.unlinkSync(file);
+
+      res.send("Backup sent successfully");
+    } catch (error) {
+      console.error(error);
+      res.status(500).send("Email failed");
+    }
   });
 });
