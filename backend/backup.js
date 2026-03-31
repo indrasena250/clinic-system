@@ -24,16 +24,19 @@ const runBackup = async (req, res) => {
     for (let tableObj of tables) {
       const tableName = Object.values(tableObj)[0];
 
-      // Get CREATE TABLE
+      // Table structure
       const [createTable] = await connection.query(`SHOW CREATE TABLE ${tableName}`);
       sqlDump += createTable[0]["Create Table"] + ";\n\n";
 
-      // Get data
+      // Table data
       const [rows] = await connection.query(`SELECT * FROM ${tableName}`);
 
       for (let row of rows) {
         const values = Object.values(row)
-          .map(val => val === null ? "NULL" : `'${val.toString().replace(/'/g, "\\'")}'`)
+          .map(val => {
+            if (val === null) return "NULL";
+            return `'${val.toString().replace(/'/g, "\\'")}'`;
+          })
           .join(",");
 
         sqlDump += `INSERT INTO ${tableName} VALUES (${values});\n`;
@@ -42,7 +45,6 @@ const runBackup = async (req, res) => {
       sqlDump += "\n\n";
     }
 
-    // Save file
     fs.writeFileSync(file, sqlDump);
 
     // Send email
@@ -68,12 +70,11 @@ const runBackup = async (req, res) => {
     });
 
     fs.unlinkSync(file);
-
     await connection.end();
 
     res.send("Backup sent successfully");
   } catch (error) {
-    console.error(error);
+    console.error("BACKUP ERROR:", error);
     res.status(500).send("Backup failed");
   }
 };
