@@ -31,9 +31,11 @@ import {
   Settings as SettingsIcon,
   Draw as SignatureIcon,
   VolumeUp as SoundIcon,
+  Logout as LogoutIcon,
 } from "@mui/icons-material";
 
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 const drawerWidth = 260;
 
@@ -42,12 +44,19 @@ const DashboardLayout = () => {
 
   const navigate = useNavigate();
   const location = useLocation();
+  const { logout } = useAuth();
+
   useEffect(() => {
-  setMobileOpen(false);
-}, [location.pathname]);
+    setMobileOpen(false);
+  }, [location.pathname]);
 
   const handleDrawerToggle = () => {
     setMobileOpen(prev => !prev);
+  };
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login");
   };
 
   const isActive = (path) => location.pathname.startsWith(path);
@@ -200,6 +209,16 @@ const DashboardLayout = () => {
           <ListItemText primary="Sound Settings" />
         </ListItemButton>
 
+        <Divider sx={{ my: 1 }} />
+
+        {/* Logout */}
+        <ListItemButton onClick={handleLogout} sx={{ color: "error.main" }}>
+          <ListItemIcon sx={{ color: "error.main" }}>
+            <LogoutIcon />
+          </ListItemIcon>
+          <ListItemText primary="Logout" />
+        </ListItemButton>
+
       </List>
     </Box>
   );
@@ -314,6 +333,12 @@ const DashboardLayout = () => {
           <Tooltip title="Sound Settings">
           <IconButton onClick={() => navigate("/settings/sounds")} sx={iconStyle(isActive("/settings/sounds"))}>
             <SoundIcon />
+          </IconButton>
+          </Tooltip>
+
+          <Tooltip title="Logout">
+          <IconButton onClick={handleLogout} sx={iconStyle(false)}>
+            <LogoutIcon />
           </IconButton>
           </Tooltip>
 
