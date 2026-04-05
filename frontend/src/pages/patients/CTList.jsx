@@ -215,7 +215,7 @@ const formatInvoiceMessage = (patientRow, allScans, invoiceUrl) => {
   const messageLines = [
     `${CENTER_NAME}`,
     "",
-    `Hello! The invoice details of ${name}` ,
+    `Hello! ${name}, Your Bill Details are:`, 
     "",
     "Patient Details:",
     `Name: ${name}`,
@@ -244,7 +244,7 @@ const formatInvoiceMessage = (patientRow, allScans, invoiceUrl) => {
     "Thank you for visiting us.",
     "Wishing you good health!",
     "",
-    `Download PDF: ${invoiceUrl}`
+    `If you want to Download PDF kindly click the link : ${invoiceUrl}`
   );
 
   return messageLines.join("\n");

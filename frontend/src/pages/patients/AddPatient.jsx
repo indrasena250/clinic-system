@@ -118,14 +118,14 @@ const AddPatient = () => {
       patient_name: "",
       age: "",
       age_unit: "years",
-      gender: "",
+      gender: "Male",
       mobile: "",
       address: "",
       scans: [{
-        scan_category: "",
-        scan_name: "",
+        scan_category: "Ultrasound",
+        scan_name: "USG Abdomen",
         referred_doctor: "",
-        amount: ""
+        amount: scanPrices["USG Abdomen"] || ""
       }],
       upload_date: currentDateTime
     }
@@ -221,23 +221,29 @@ useEffect(() => {
       setOpenPopup(true);
       playSound("success");
 
-      // Refresh next patient ID
-      const response = await getNextPatientId();
-      setNextPatientId(response.nextId);
+      // Refresh next IDs so the form updates without page reload
+      const [patientRes, ctRes, ultraRes] = await Promise.all([
+        getNextPatientId(),
+        getNextCTId(),
+        getNextUltraId()
+      ]);
+      setNextPatientId(patientRes.nextId);
+      setNextCTId(ctRes.nextId);
+      setNextUltraId(ultraRes.nextId);
 
       // Reset form
       reset({
         patient_name: "",
         age: "",
         age_unit: "years",
-        gender: "",
+        gender: "Male",
         mobile: "",
         address: "",
         scans: [{
-          scan_category: "",
-          scan_name: "",
+          scan_category: "Ultrasound",
+          scan_name: "USG Abdomen",
           referred_doctor: "",
-          amount: ""
+          amount: scanPrices["USG Abdomen"] || ""
         }],
         upload_date: dayjs()
       });
