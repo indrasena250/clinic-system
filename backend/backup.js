@@ -1,15 +1,21 @@
 const dns = require("dns");
-dns.setDefaultResultOrder("ipv4first"); // ✅ Force IPv4 (CRITICAL FIX)
+dns.setDefaultResultOrder("ipv4first"); // ✅ Fix IPv6 issue
 
 const mysql = require("mysql2/promise");
 const nodemailer = require("nodemailer");
 
 const runBackup = async (req, res) => {
   try {
-    // ✅ Optional security (recommended)
-    if (req.query.key !== process.env.BACKUP_KEY) {
+    // ✅ Safe key validation (handles spaces, encoding issues)
+    const reqKey = decodeURIComponent(req.query.key || "").trim();
+    const envKey = (process.env.BACKUP_KEY || "").trim();
+
+    if (reqKey !== envKey) {
+      console.log("Unauthorized access:", { reqKey, envKey });
       return res.status(403).send("Unauthorized");
     }
+
+    console.log("Backup started");
 
     // ✅ DB connection
     const connection = await mysql.createConnection({
@@ -23,8 +29,6 @@ const runBackup = async (req, res) => {
 
     const date = new Date().toISOString().split("T")[0];
     let sqlDump = "";
-
-    console.log("Backup started");
 
     // ✅ Get all tables
     const [tables] = await connection.query("SHOW TABLES");
@@ -41,7 +45,7 @@ const runBackup = async (req, res) => {
 
       for (let row of rows) {
         const values = Object.values(row)
-          .map(val => mysql.escape(val)) // ✅ safer than manual replace
+          .map(val => mysql.escape(val)) // ✅ safe handling
           .join(",");
 
         sqlDump += `INSERT INTO ${tableName} VALUES (${values});\n`;
@@ -52,18 +56,18 @@ const runBackup = async (req, res) => {
 
     console.log("SQL dump created");
 
-    // ✅ Email config (fixed IPv6 issue)
+    // ✅ Email config (fixed)
     const transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
       port: 587,
       secure: false,
       auth: {
         user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
+        pass: process.env.EMAIL_PASS, // must be Gmail App Password
       },
     });
 
-    // ✅ Send without filesystem (Render-safe)
+    // ✅ Send email without saving file
     await transporter.sendMail({
       from: process.env.EMAIL_USER,
       to: process.env.EMAIL_USER,
@@ -72,12 +76,12 @@ const runBackup = async (req, res) => {
       attachments: [
         {
           filename: `backup-${date}.sql`,
-          content: Buffer.from(sqlDump), // ✅ no fs usage
+          content: Buffer.from(sqlDump),
         },
       ],
     });
 
-    console.log("Email sent");
+    console.log("Email sent successfully");
 
     await connection.end();
 
