@@ -1,11 +1,20 @@
+const dns = require("dns");
+dns.setDefaultResultOrder("ipv4first");
+
 const mysql = require("mysql2/promise");
-const nodemailer = require("nodemailer");
+const cloudinary = require("cloudinary").v2;
+
+cloudinary.config({
+  cloud_name: process.env.CLOUD_NAME,
+  api_key: process.env.CLOUD_API_KEY,
+  api_secret: process.env.CLOUD_API_SECRET,
+});
 
 const runBackup = async (req, res) => {
   try {
-    // secure key check
+    // ✅ Secure key check
     const reqKey = decodeURIComponent(req.query.key || "").trim();
-    const envKey = (process.env.BACKUP_SECRET || "").trim();
+    const envKey = (process.env.BACKUP_KEY || "").trim();
 
     if (reqKey !== envKey) {
       return res.status(403).send("Unauthorized");
@@ -13,6 +22,7 @@ const runBackup = async (req, res) => {
 
     console.log("Backup started");
 
+    // ✅ DB connection
     const connection = await mysql.createConnection({
       host: process.env.MYSQLHOST,
       user: process.env.MYSQLUSER,
@@ -25,17 +35,17 @@ const runBackup = async (req, res) => {
     const date = new Date().toISOString().split("T")[0];
     let sqlDump = "";
 
-    // get tables
+    // ✅ Get tables
     const [tables] = await connection.query("SHOW TABLES");
 
     for (let tableObj of tables) {
       const tableName = Object.values(tableObj)[0];
 
-      // structure
+      // Structure
       const [createTable] = await connection.query(`SHOW CREATE TABLE ${tableName}`);
       sqlDump += createTable[0]["Create Table"] + ";\n\n";
 
-      // data
+      // Data
       const [rows] = await connection.query(`SELECT * FROM ${tableName}`);
 
       for (let row of rows) {
@@ -51,39 +61,24 @@ const runBackup = async (req, res) => {
 
     console.log("SQL dump created");
 
-    // SMTP transporter (forced IPv4 Gmail server)
-    const transporter = nodemailer.createTransport({
-      host: "142.250.102.109", // Gmail SMTP IPv4
-      port: 587,
-      secure: false,
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-      },
-      tls: {
-        rejectUnauthorized: false
-      }
-    });
-
-    // send email with attachment
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: process.env.EMAIL_USER,
-      subject: `Clinic DB Backup - ${date}`,
-      text: "Database backup attached.",
-      attachments: [
-        {
-          filename: `backup-${date}.sql`,
-          content: Buffer.from(sqlDump)
-        }
-      ]
-    });
-
-    console.log("Backup email sent");
-
     await connection.end();
 
-    res.send("Backup sent successfully");
+    // ✅ Upload to Cloudinary
+    const result = await cloudinary.uploader.upload(
+      `data:text/plain;base64,${Buffer.from(sqlDump).toString("base64")}`,
+      {
+        resource_type: "raw",
+        public_id: `clinic-backup-${date}`,
+      }
+    );
+
+    console.log("Backup uploaded:", result.secure_url);
+
+    // ✅ Return link
+    res.send({
+      message: "Backup successful",
+      url: result.secure_url,
+    });
 
   } catch (error) {
     console.error("BACKUP ERROR:", error);
