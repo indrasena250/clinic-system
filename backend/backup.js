@@ -14,7 +14,7 @@ const runBackup = async (req, res) => {
   try {
     // ✅ Secure key check
     const reqKey = decodeURIComponent(req.query.key || "").trim();
-    const envKey = (process.env.BACKUP_KEY || "").trim();
+    const envKey = (process.env.BACKUP_SECRET || "").trim();
 
     if (reqKey !== envKey) {
       return res.status(403).send("Unauthorized");
