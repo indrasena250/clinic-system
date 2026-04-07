@@ -4,11 +4,42 @@ dns.setDefaultResultOrder("ipv4first");
 const mysql = require("mysql2/promise");
 const cloudinary = require("cloudinary").v2;
 
+// ✅ Cloudinary config
 cloudinary.config({
   cloud_name: process.env.CLOUD_NAME,
   api_key: process.env.API_KEY,
   api_secret: process.env.API_SECRET,
 });
+
+// ✅ Delete old backups (keep only latest 7)
+const deleteExtraBackups = async (keep = 7) => {
+  try {
+    const result = await cloudinary.api.resources({
+      type: "upload",
+      resource_type: "raw",
+      prefix: "clinic-backup-",
+      max_results: 100,
+    });
+
+    const sorted = result.resources.sort(
+      (a, b) => new Date(b.created_at) - new Date(a.created_at)
+    );
+
+    const toDelete = sorted.slice(keep);
+
+    for (let file of toDelete) {
+      await cloudinary.uploader.destroy(file.public_id, {
+        resource_type: "raw",
+      });
+      console.log("Deleted old backup:", file.public_id);
+    }
+
+    console.log(`Kept latest ${keep} backups`);
+
+  } catch (err) {
+    console.error("Cleanup error:", err.message);
+  }
+};
 
 const runBackup = async (req, res) => {
   try {
@@ -35,17 +66,17 @@ const runBackup = async (req, res) => {
     const date = new Date().toISOString().split("T")[0];
     let sqlDump = "";
 
-    // ✅ Get tables
+    // ✅ Get all tables
     const [tables] = await connection.query("SHOW TABLES");
 
     for (let tableObj of tables) {
       const tableName = Object.values(tableObj)[0];
 
-      // Structure
+      // Table structure
       const [createTable] = await connection.query(`SHOW CREATE TABLE ${tableName}`);
       sqlDump += createTable[0]["Create Table"] + ";\n\n";
 
-      // Data
+      // Table data
       const [rows] = await connection.query(`SELECT * FROM ${tableName}`);
 
       for (let row of rows) {
@@ -74,7 +105,10 @@ const runBackup = async (req, res) => {
 
     console.log("Backup uploaded:", result.secure_url);
 
-    // ✅ Return link
+    // ✅ Delete old backups (keep 7)
+    await deleteExtraBackups(7);
+
+    // ✅ Response
     res.send({
       message: "Backup successful",
       url: result.secure_url,
