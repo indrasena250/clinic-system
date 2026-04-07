@@ -298,16 +298,16 @@ const UltrasoundList = () => {
     {
       field: "slno",
       headerName: "SL No",
-      flex: 0.35,
-      minWidth: 50,
+      flex: 0.3,
+      minWidth: 40,
       align: "left",
       headerAlign: "left",
     },
     {
       field: "upload_date",
       headerName: "Date & Time",
-      flex: 1.45,
-      minWidth: 140,
+      flex: 1.2,
+      minWidth: 120,
       align: "left",
       headerAlign: "left",
       renderCell: (params) => (
@@ -332,19 +332,19 @@ const UltrasoundList = () => {
     {
       field: "id",
       headerName: "ID",
-      flex: 0.5,
-      minWidth: 70,
+      flex: 0.4,
+      minWidth: 50,
       align: "left",
       headerAlign: "left",
     },
-    { field: "patient_name", headerName: "Patient Name", flex: 1.5, minWidth: 110, align: "left", headerAlign: "left" },
-    { field: "age", headerName: "Age", flex: 0.4, minWidth: 48, align: "left", headerAlign: "left" },
-    { field: "gender", headerName: "Gender", flex: 0.6, minWidth: 70, align: "left", headerAlign: "left" },
+    { field: "patient_name", headerName: "Patient Name", flex: 1.2, minWidth: 100, align: "left", headerAlign: "left" },
+    { field: "age", headerName: "Age", flex: 0.3, minWidth: 40, align: "left", headerAlign: "left" },
+    { field: "gender", headerName: "Gender", flex: 0.5, minWidth: 60, align: "left", headerAlign: "left" },
     {
       field: "scan_name",
       headerName: "Scan Name",
-      flex: 1.2,
-      minWidth: 110,
+      flex: 0.9,
+      minWidth: 90,
       align: "left",
       headerAlign: "left",
       renderCell: (params) => (
@@ -355,9 +355,9 @@ const UltrasoundList = () => {
     },
     {
       field: "referred_doctor",
-      headerName: "Referral Doctor",
-      flex: 1.2,
-      minWidth: 120,
+      headerName: "Doctor",
+      flex: 0.9,
+      minWidth: 90,
       align: "left",
       headerAlign: "left",
       renderCell: (params) => (
@@ -366,12 +366,12 @@ const UltrasoundList = () => {
         </Typography>
       ),
     },
-    { field: "mobile", headerName: "Mobile", flex: 0.85, minWidth: 100, align: "left", headerAlign: "left" },
+    { field: "mobile", headerName: "Mobile", flex: 0.8, minWidth: 90, align: "left", headerAlign: "left" },
     {
       field: "address",
       headerName: "Address",
-      flex: 1.3,
-      minWidth: 120,
+      flex: 1.0,
+      minWidth: 100,
       align: "left",
       headerAlign: "left",
       renderCell: (params) => (
@@ -383,8 +383,8 @@ const UltrasoundList = () => {
     {
       field: "amount",
       headerName: "Amount",
-      flex: 0.75,
-      minWidth: 75,
+      flex: 0.6,
+      minWidth: 65,
       align: "left",
       headerAlign: "left",
       renderCell: (params) => `₹ ${params.value}`,
@@ -392,8 +392,8 @@ const UltrasoundList = () => {
     {
       field: "tools",
       headerName: "Actions",
-      flex: 1,
-      minWidth: 120,
+      flex: 0.8,
+      minWidth: 90,
       sortable: false,
       filterable: false,
       align: "left",
@@ -402,7 +402,7 @@ const UltrasoundList = () => {
         <Box sx={{
           display: "flex",
           flexDirection: "row",
-          gap: 1,
+          gap: 0.5,
           alignItems: "center",
           justifyContent: "flex-start",
           width: "100%",
@@ -471,7 +471,13 @@ const UltrasoundList = () => {
       row.mobile?.toLowerCase().includes(normalized) ||
       row.referred_doctor?.toLowerCase().includes(normalized)
     );
-  });
+  }).sort((a, b) => {
+    // Sort by ID in descending order, then recalculate SL NO
+    return b.id - a.id;
+  }).map((row, index) => ({
+    ...row,
+    slno: index + 1, // Recalculate SL NO in increasing order
+  }));
 
   return (
     <Paper sx={{ p: 3 }}>

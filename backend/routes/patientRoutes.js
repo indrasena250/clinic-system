@@ -1814,6 +1814,15 @@ router.get("/dashboard-summary", protect, authorize("admin"), async (req, res) =
     const todayStart = today.format("YYYY-MM-DD 00:00:00");
     const todayEnd = today.add(1, 'day').format("YYYY-MM-DD 00:00:00");
     
+    // Get current month data
+    const currentMonthStart = today.startOf('month').format("YYYY-MM-DD 00:00:00");
+    const currentMonthEnd = today.endOf('month').add(1, 'day').format("YYYY-MM-DD 00:00:00");
+    
+    // Get last month data
+    const lastMonth = today.subtract(1, 'month');
+    const lastMonthStart = lastMonth.startOf('month').format("YYYY-MM-DD 00:00:00");
+    const lastMonthEnd = lastMonth.endOf('month').add(1, 'day').format("YYYY-MM-DD 00:00:00");
+    
     const [todayPatients] = await db.query(
       `SELECT
         IFNULL(SUM(CASE WHEN scan_category = 'Ultrasound' THEN amount - IFNULL(referral_amount, 0) END), 0) AS ultrasound_income,
@@ -1838,6 +1847,60 @@ router.get("/dashboard-summary", protect, authorize("admin"), async (req, res) =
        FROM expenses 
        WHERE clinic_id = ? AND COALESCE(created_at, expense_date) >= ? AND COALESCE(created_at, expense_date) < ?`,
       [clinicId, todayStart, todayEnd]
+    );
+
+    // Get current month totals
+    const [currentMonthPatients] = await db.query(
+      `SELECT
+        IFNULL(SUM(CASE WHEN scan_category = 'Ultrasound' THEN amount - IFNULL(referral_amount, 0) END), 0) AS ultrasound_income,
+        IFNULL(SUM(CASE WHEN scan_category = 'CT' THEN amount - IFNULL(referral_amount, 0) END), 0) AS ct_income
+      FROM patients 
+      WHERE clinic_id = ? AND COALESCE(created_at, upload_date) >= ? AND COALESCE(created_at, upload_date) < ?`,
+      [clinicId, currentMonthStart, currentMonthEnd]
+    );
+
+    const [currentMonthExtra] = await db.query(
+      `SELECT IFNULL(SUM(CASE WHEN income_type = 'USG' THEN amount ELSE 0 END), 0) AS extra_usg,
+              IFNULL(SUM(CASE WHEN income_type = 'CT' THEN amount ELSE 0 END), 0) AS extra_ct,
+              IFNULL(SUM(CASE WHEN income_type = 'XRAY' THEN amount ELSE 0 END), 0) AS extra_xray,
+              IFNULL(SUM(CASE WHEN income_type = 'Other' THEN amount ELSE 0 END), 0) AS extra_other
+       FROM extra_income 
+       WHERE clinic_id = ? AND COALESCE(created_at, income_date) >= ? AND COALESCE(created_at, income_date) < ?`,
+      [clinicId, currentMonthStart, currentMonthEnd]
+    );
+
+    const [currentMonthExpenses] = await db.query(
+      `SELECT IFNULL(SUM(amount), 0) AS total_expense 
+       FROM expenses 
+       WHERE clinic_id = ? AND COALESCE(created_at, expense_date) >= ? AND COALESCE(created_at, expense_date) < ?`,
+      [clinicId, currentMonthStart, currentMonthEnd]
+    );
+
+    // Get last month totals
+    const [lastMonthPatients] = await db.query(
+      `SELECT
+        IFNULL(SUM(CASE WHEN scan_category = 'Ultrasound' THEN amount - IFNULL(referral_amount, 0) END), 0) AS ultrasound_income,
+        IFNULL(SUM(CASE WHEN scan_category = 'CT' THEN amount - IFNULL(referral_amount, 0) END), 0) AS ct_income
+      FROM patients 
+      WHERE clinic_id = ? AND COALESCE(created_at, upload_date) >= ? AND COALESCE(created_at, upload_date) < ?`,
+      [clinicId, lastMonthStart, lastMonthEnd]
+    );
+
+    const [lastMonthExtra] = await db.query(
+      `SELECT IFNULL(SUM(CASE WHEN income_type = 'USG' THEN amount ELSE 0 END), 0) AS extra_usg,
+              IFNULL(SUM(CASE WHEN income_type = 'CT' THEN amount ELSE 0 END), 0) AS extra_ct,
+              IFNULL(SUM(CASE WHEN income_type = 'XRAY' THEN amount ELSE 0 END), 0) AS extra_xray,
+              IFNULL(SUM(CASE WHEN income_type = 'Other' THEN amount ELSE 0 END), 0) AS extra_other
+       FROM extra_income 
+       WHERE clinic_id = ? AND COALESCE(created_at, income_date) >= ? AND COALESCE(created_at, income_date) < ?`,
+      [clinicId, lastMonthStart, lastMonthEnd]
+    );
+
+    const [lastMonthExpenses] = await db.query(
+      `SELECT IFNULL(SUM(amount), 0) AS total_expense 
+       FROM expenses 
+       WHERE clinic_id = ? AND COALESCE(created_at, expense_date) >= ? AND COALESCE(created_at, expense_date) < ?`,
+      [clinicId, lastMonthStart, lastMonthEnd]
     );
 
     // Get all-time totals for income and expenses
@@ -1876,6 +1939,20 @@ router.get("/dashboard-summary", protect, authorize("admin"), async (req, res) =
     const todayExpense = Number(todayExpenses[0].total_expense || 0);
     const todayNet = todayUltrasoundIncome + todayCTIncome + todayOtherIncome - todayExpense;
 
+    // Current month calculations
+    const currentMonthUltrasound = Number(currentMonthPatients[0].ultrasound_income || 0) + Number(currentMonthExtra[0].extra_usg || 0);
+    const currentMonthCT = Number(currentMonthPatients[0].ct_income || 0) + Number(currentMonthExtra[0].extra_ct || 0);
+    const currentMonthOther = Number(currentMonthExtra[0].extra_xray || 0) + Number(currentMonthExtra[0].extra_other || 0);
+    const currentMonthExpense = Number(currentMonthExpenses[0].total_expense || 0);
+    const currentMonthNet = currentMonthUltrasound + currentMonthCT + currentMonthOther - currentMonthExpense;
+
+    // Last month calculations
+    const lastMonthUltrasound = Number(lastMonthPatients[0].ultrasound_income || 0) + Number(lastMonthExtra[0].extra_usg || 0);
+    const lastMonthCT = Number(lastMonthPatients[0].ct_income || 0) + Number(lastMonthExtra[0].extra_ct || 0);
+    const lastMonthOther = Number(lastMonthExtra[0].extra_xray || 0) + Number(lastMonthExtra[0].extra_other || 0);
+    const lastMonthExpense = Number(lastMonthExpenses[0].total_expense || 0);
+    const lastMonthNet = lastMonthUltrasound + lastMonthCT + lastMonthOther - lastMonthExpense;
+
     // All-time calculations
     const totalUltrasound = Number(allTimePatients[0].ultrasound_income || 0) + Number(allTimeExtra[0].extra_usg || 0);
     const totalCT = Number(allTimePatients[0].ct_income || 0) + Number(allTimeExtra[0].extra_ct || 0);
@@ -1904,6 +1981,20 @@ router.get("/dashboard-summary", protect, authorize("admin"), async (req, res) =
       todayOtherIncome,
       todayExpense,
       todayNet,
+      
+      /* Current month data */
+      currentMonthUltrasound,
+      currentMonthCT,
+      currentMonthOther,
+      currentMonthExpense,
+      currentMonthNet,
+      
+      /* Last month data */
+      lastMonthUltrasound,
+      lastMonthCT,
+      lastMonthOther,
+      lastMonthExpense,
+      lastMonthNet,
       
       /* All-time totals */
       totalUltrasound,
