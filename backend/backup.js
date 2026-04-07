@@ -1,23 +1,18 @@
-const dns = require("dns");
-dns.setDefaultResultOrder("ipv4first"); // ✅ Fix IPv6 issue
-
 const mysql = require("mysql2/promise");
 const nodemailer = require("nodemailer");
 
 const runBackup = async (req, res) => {
   try {
-    // ✅ Safe key validation (handles spaces, encoding issues)
+    // secure key check
     const reqKey = decodeURIComponent(req.query.key || "").trim();
     const envKey = (process.env.BACKUP_SECRET || "").trim();
 
     if (reqKey !== envKey) {
-      console.log("Unauthorized access:", { reqKey, envKey });
       return res.status(403).send("Unauthorized");
     }
 
     console.log("Backup started");
 
-    // ✅ DB connection
     const connection = await mysql.createConnection({
       host: process.env.MYSQLHOST,
       user: process.env.MYSQLUSER,
@@ -30,22 +25,22 @@ const runBackup = async (req, res) => {
     const date = new Date().toISOString().split("T")[0];
     let sqlDump = "";
 
-    // ✅ Get all tables
+    // get tables
     const [tables] = await connection.query("SHOW TABLES");
 
     for (let tableObj of tables) {
       const tableName = Object.values(tableObj)[0];
 
-      // Table structure
+      // structure
       const [createTable] = await connection.query(`SHOW CREATE TABLE ${tableName}`);
       sqlDump += createTable[0]["Create Table"] + ";\n\n";
 
-      // Table data
+      // data
       const [rows] = await connection.query(`SELECT * FROM ${tableName}`);
 
       for (let row of rows) {
         const values = Object.values(row)
-          .map(val => mysql.escape(val)) // ✅ safe handling
+          .map(val => mysql.escape(val))
           .join(",");
 
         sqlDump += `INSERT INTO ${tableName} VALUES (${values});\n`;
@@ -56,32 +51,35 @@ const runBackup = async (req, res) => {
 
     console.log("SQL dump created");
 
-    // ✅ Email config (fixed)
+    // SMTP transporter (forced IPv4 Gmail server)
     const transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com",
+      host: "142.250.102.109", // Gmail SMTP IPv4
       port: 587,
       secure: false,
       auth: {
         user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS, // must be Gmail App Password
+        pass: process.env.EMAIL_PASS
       },
+      tls: {
+        rejectUnauthorized: false
+      }
     });
 
-    // ✅ Send email without saving file
+    // send email with attachment
     await transporter.sendMail({
       from: process.env.EMAIL_USER,
       to: process.env.EMAIL_USER,
-      subject: `DB Backup - ${date}`,
-      text: "Database backup attached",
+      subject: `Clinic DB Backup - ${date}`,
+      text: "Database backup attached.",
       attachments: [
         {
           filename: `backup-${date}.sql`,
-          content: Buffer.from(sqlDump),
-        },
-      ],
+          content: Buffer.from(sqlDump)
+        }
+      ]
     });
 
-    console.log("Email sent successfully");
+    console.log("Backup email sent");
 
     await connection.end();
 
