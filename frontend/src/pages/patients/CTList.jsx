@@ -301,7 +301,7 @@ const handleSendWhatsApp = async (row) => {
     {
       field: "upload_date",
       headerName: "Date & Time",
-      flex: 1.4,
+      flex: 1.45,
       minWidth: 140,
       align: "left",
       headerAlign: "left",
