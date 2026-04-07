@@ -49,11 +49,14 @@ const runBackup = async (req, res) => {
 
     // Send email
     const transporter = nodemailer.createTransport({
-      service: "gmail",
+      host: "smtp.gmail.com",
+      port: 587, // IMPORTANT: change from 465 → 587
+      secure: false, // TLS instead of SSL
       auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS,
       },
+      family: 4 // ✅ FORCE IPv4 (THIS FIXES YOUR ERROR)
     });
 
     await transporter.sendMail({
