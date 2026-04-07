@@ -8,7 +8,7 @@ const runBackup = async (req, res) => {
   try {
     // ✅ Safe key validation (handles spaces, encoding issues)
     const reqKey = decodeURIComponent(req.query.key || "").trim();
-    const envKey = (process.env.BACKUP_KEY || "").trim();
+    const envKey = (process.env.BACKUP_SECRET || "").trim();
 
     if (reqKey !== envKey) {
       console.log("Unauthorized access:", { reqKey, envKey });
