@@ -29,7 +29,6 @@ const corsOptions = {
       return callback(null, true);
     }
 
-    // ❗ IMPORTANT: don't throw error
     return callback(null, false);
   },
   credentials: true,
@@ -38,7 +37,6 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-app.options("*", cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
