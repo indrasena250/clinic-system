@@ -119,9 +119,9 @@ const SettleButton = ({ onSettlementComplete }) => {
         sx={{
           textTransform: "none",
           fontWeight: 600,
-          px: isMobile ? 1.5 : 2.5,
+          px: isMobile ? 1.25 : 2.5,
           py: 1.25,
-        }}
+          }}
       >
         {loading ? "Settling..." : "Settle & Generate Report"}
       </Button>

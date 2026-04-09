@@ -210,7 +210,7 @@ const Dashboard = () => {
       display: "flex",
       justifyContent: { xs: "center", md: "flex-end" },
       alignItems: "center",
-      gap: 1,
+      gap: isMobile ? 0.5 : 1.5,
     }}
   >
     {/* REFRESH BUTTON */}
