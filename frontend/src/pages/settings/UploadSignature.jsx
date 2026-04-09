@@ -10,12 +10,13 @@ import {
   CardContent,
   CardMedia,
   Grid,
+  TextField,
   useTheme,
   useMediaQuery
 } from "@mui/material";
 import { CloudUpload, Image, Refresh, Delete } from "@mui/icons-material";
 import API from "../../api/axios";
-import { uploadSignature, getAllSignatures, deleteSignature } from "../../api/settingsApi";
+import { uploadSignature, getAllSignatures, deleteSignature, getClinicSettings, updateClinicSettings } from "../../api/settingsApi";
 
 const UploadSignature = () => {
   const theme = useTheme();
@@ -31,6 +32,13 @@ const UploadSignature = () => {
   const [success, setSuccess] = useState("");
   const [allSignatures, setAllSignatures] = useState([]);
   const [signatureUrls, setSignatureUrls] = useState({});
+  const [clinicName, setClinicName] = useState("");
+  const [clinicAddress, setClinicAddress] = useState("");
+  const [clinicPhone, setClinicPhone] = useState("");
+  const [clinicLoading, setClinicLoading] = useState(true);
+  const [clinicSaving, setClinicSaving] = useState(false);
+  const [clinicError, setClinicError] = useState("");
+  const [clinicSuccess, setClinicSuccess] = useState("");
   const fileInputRef = useRef(null);
 
   const fetchCurrentSignature = async () => {
@@ -102,9 +110,41 @@ if (selected) {
     }
   };
 
+  const fetchClinicSettings = async () => {
+    setClinicLoading(true);
+    setClinicError("");
+    try {
+      const data = await getClinicSettings();
+      setClinicName(data.name || "");
+      setClinicAddress(data.address || "");
+      setClinicPhone(data.phone || "");
+    } catch (err) {
+      console.error("Failed to fetch clinic settings:", err);
+      setClinicError("Failed to load clinic settings");
+    } finally {
+      setClinicLoading(false);
+    }
+  };
+
+  const handleSaveClinicSettings = async () => {
+    setClinicSaving(true);
+    setClinicError("");
+    setClinicSuccess("");
+    try {
+      await updateClinicSettings(clinicName, clinicAddress, clinicPhone);
+      setClinicSuccess("Clinic details updated successfully");
+    } catch (err) {
+      console.error("Failed to save clinic settings:", err);
+      setClinicError("Failed to save clinic details");
+    } finally {
+      setClinicSaving(false);
+    }
+  };
+
   useEffect(() => {
     fetchCurrentSignature();
     fetchAllSignatures();
+    fetchClinicSettings();
 
     // Cleanup object URLs on component unmount
     return () => {
@@ -176,6 +216,77 @@ if (selected) {
       <Typography variant="h5" gutterBottom>
         Upload Digital Signature
       </Typography>
+
+      <Paper sx={{ p: 3, mb: 3 }}>
+        <Typography variant="h6" gutterBottom>
+          Clinic Details
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Set the clinic name, address, and phone number used in generated PDFs. Address and phone are used only in the invoice header.
+        </Typography>
+
+        <Grid container spacing={2}>
+          <Grid item xs={12} md={4}>
+            <TextField
+              label="Clinic Name"
+              value={clinicName}
+              onChange={(e) => setClinicName(e.target.value)}
+              fullWidth
+              disabled={clinicLoading}
+            />
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <TextField
+              label="Clinic Address"
+              value={clinicAddress}
+              onChange={(e) => setClinicAddress(e.target.value)}
+              fullWidth
+              multiline
+              rows={2}
+              disabled={clinicLoading}
+            />
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <TextField
+              label="Clinic Phone"
+              value={clinicPhone}
+              onChange={(e) => setClinicPhone(e.target.value)}
+              fullWidth
+              disabled={clinicLoading}
+              placeholder="e.g., 8977419348, 8977449348"
+            />
+          </Grid>
+        </Grid>
+
+        <Box sx={{ mt: 2, display: "flex", flexWrap: "wrap", gap: 2 }}>
+          <Button
+            variant="contained"
+            onClick={handleSaveClinicSettings}
+            disabled={clinicLoading || clinicSaving}
+          >
+            {clinicSaving ? "Saving..." : "Save Clinic Details"}
+          </Button>
+          <Button
+            variant="outlined"
+            onClick={fetchClinicSettings}
+            disabled={clinicLoading || clinicSaving}
+          >
+            Reload
+          </Button>
+        </Box>
+
+        {clinicError && (
+          <Alert severity="error" sx={{ mt: 2 }}>
+            {clinicError}
+          </Alert>
+        )}
+
+        {clinicSuccess && (
+          <Alert severity="success" sx={{ mt: 2 }}>
+            {clinicSuccess}
+          </Alert>
+        )}
+      </Paper>
 
       <Grid container spacing={3} sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "auto 1fr" }, gap: 3 }}>
         {/* Current Signature */}

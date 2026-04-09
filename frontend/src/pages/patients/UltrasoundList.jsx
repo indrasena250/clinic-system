@@ -20,6 +20,7 @@ import {
   Grid,
   Autocomplete,
 } from "@mui/material";
+import { useAuth } from "../../context/AuthContext";
 import { DataGrid } from "@mui/x-data-grid";
 import EditIcon from "@mui/icons-material/Edit";
 import FileDownloadIcon from "@mui/icons-material/FileDownload";
@@ -191,6 +192,8 @@ const UltrasoundList = () => {
     }
   };
 
+  const { user } = useAuth();
+
   const toWhatsAppNumber = (mobile) => {
     const digits = String(mobile || "").replace(/\D/g, "");
     if (!digits) return null;
@@ -199,7 +202,7 @@ const UltrasoundList = () => {
     return digits;
   };
 
-  const CENTER_NAME = "SRIDEVI DIAGNOSTIC CENTER";
+  const CENTER_NAME = user?.clinic_name || "SRIDEVI DIAGNOSTIC CENTER";
 
   const formatInvoiceMessage = (patientRow, allScans, invoiceUrl) => {
     const name = patientRow.patient_name || "-";
@@ -480,46 +483,102 @@ const UltrasoundList = () => {
   }));
 
   return (
-    <Paper sx={{ p: 3 }}>
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2, flexWrap: "wrap", gap: 1 }}>
-        <Typography variant="h5" fontWeight="bold">
-          Ultrasound Patients
-        </Typography>
+  <Paper
+    sx={{
+      p: 3,
+      borderRadius: "20px",
+      background: "rgba(255,255,255,0.7)",
+      backdropFilter: "blur(12px)",
+      border: "1px solid rgba(255,255,255,0.3)",
+      boxShadow: "0 10px 40px rgba(0,0,0,0.08)",
+    }}
+  >
+      <Box
+  sx={{
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 2,
+    mb: 3,
+    pb: 2,
+    borderBottom: "1px solid rgba(0,0,0,0.06)",
+  }}
+>
+  {/* TITLE */}
+  <Box>
+    <Typography
+      sx={{
+        fontSize: "1.6rem",
+        fontWeight: 700,
+        letterSpacing: "-0.5px",
+      }}
+    >
+      Ultrasound Patients
+    </Typography>
 
-        <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", justifyContent: "center", flex: 1 }}>
-          {[
-            { key: "today", label: "Today" },
-            { key: "yesterday", label: "Yesterday" },
-            { key: "7days", label: "7 Days" },
-            { key: "month", label: "Month" },
-            { key: "all", label: "All" },
-          ].map((item) => (
-            <Button
-              key={item.key}
-              variant={filterRange === item.key ? "contained" : "outlined"}
-              size="small"
-              onClick={() => setFilterRange(item.key)}
-            >
-              {item.label}
-            </Button>
-          ))}
-        </Box>
+    <Typography sx={{ fontSize: 13, color: "text.secondary" }}>
+      Manage patient records, invoices & reports
+    </Typography>
+  </Box>
 
-        <TextField
-          size="small"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          placeholder="Search patient, mobile, doctor..."
-          InputProps={{
-            endAdornment: searchTerm ? (
-              <IconButton size="small" onClick={() => setSearchTerm("")}>
-                <ClearIcon fontSize="small" />
-              </IconButton>
-            ) : null,
-          }}
-          sx={{ minWidth: 250 }}
-        />
-      </Box>
+  {/* FILTER BUTTONS */}
+  <Box sx={{ display: "flex", flexWrap: "wrap" }}>
+    {[
+      { key: "today", label: "Today" },
+      { key: "yesterday", label: "Yesterday" },
+      { key: "7days", label: "7 Days" },
+      { key: "month", label: "Month" },
+      { key: "all", label: "All" },
+    ].map((item) => (
+      <Button
+        key={item.key}
+        onClick={() => setFilterRange(item.key)}
+        sx={{
+          borderRadius: "999px",
+          px: isMd ? 0.5:2,
+          py: 0.6,
+          fontSize: "0.8rem",
+          textTransform: "none",
+          fontWeight: 600,
+          background:
+            filterRange === item.key
+              ? "linear-gradient(135deg,#1976d2,#42a5f5)"
+              : "rgba(0,0,0,0.04)",
+          color: filterRange === item.key ? "#fff" : "#555",
+          transition: "all 0.25s",
+          "&:hover": {
+            transform: "translateY(-2px)",
+          },
+        }}
+      >
+        {item.label}
+      </Button>
+    ))}
+  </Box>
+
+  {/* SEARCH */}
+  <TextField
+    size="small"
+    value={searchTerm}
+    onChange={(e) => setSearchTerm(e.target.value)}
+    placeholder="Search patient, mobile, doctor..."
+    sx={{
+      minWidth: 260,
+      "& .MuiOutlinedInput-root": {
+        borderRadius: "999px",
+        background: "rgba(0,0,0,0.03)",
+      },
+    }}
+    InputProps={{
+      endAdornment: searchTerm && (
+        <IconButton size="small" onClick={() => setSearchTerm("")}>
+          <ClearIcon fontSize="small" />
+        </IconButton>
+      ),
+    }}
+  />
+</Box>
 
       {error && <Alert severity="error">{error}</Alert>}
 
@@ -530,7 +589,8 @@ const UltrasoundList = () => {
               borderRadius: 3,
               boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
               border: "1px solid rgba(255,107,107,0.1)",
-              background: "linear-gradient(135deg, #ffffff 0%, #fafafa 100%)",
+              background: "rgba(255,255,255,0.85)",
+              backdropFilter: "blur(10px)",
               overflow: "hidden",
               transition: "all 0.3s ease",
               "&:hover": {
@@ -540,7 +600,7 @@ const UltrasoundList = () => {
             }}>
               {/* Header Section */}
               <Box sx={{
-                background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                background: "linear-gradient(135deg, #5f9cff, #7b61ff)",
                 color: "white",
                 p: 2,
                 position: "relative"
@@ -712,30 +772,28 @@ const UltrasoundList = () => {
             autoHeight
             disableSelectionOnClick
             sx={{
-              "& .MuiDataGrid-virtualScroller": {
-                overflowX: "hidden !important",
-              },
-              "& .MuiDataGrid-cell": {
-                whiteSpace: "normal !important",
-                wordBreak: "break-word",
-                lineHeight: 1.3,
-                px: 0.5,
-                py: 0.5,
-                display: "flex",
-                alignItems: "center",
-              },
-              "& .MuiDataGrid-row": {
-                maxHeight: "none !important",
-                "&:hover": {
-                  backgroundColor: "#f5f5f5",
-                },
-              },
-              "& .MuiDataGrid-columnHeader": {
-                px: 0.5,
-                backgroundColor: "#f0f0f0",
-                fontWeight: "bold",
-              },
-            }}
+  border: "none",
+  fontSize: "0.85rem",
+
+  "& .MuiDataGrid-columnHeaders": {
+    background: "rgba(0,0,0,0.04)",
+    borderRadius: "10px",
+    fontWeight: 600,
+  },
+
+  "& .MuiDataGrid-row": {
+    borderRadius: "10px",
+    transition: "all 0.2s",
+    "&:hover": {
+      backgroundColor: "rgba(25,118,210,0.05)",
+      transform: "scale(1.002)",
+    },
+  },
+
+  "& .MuiDataGrid-cell": {
+    borderBottom: "1px solid rgba(0,0,0,0.05)",
+  },
+}}
           />
         </div>
       )}
@@ -744,11 +802,19 @@ const UltrasoundList = () => {
          EDIT DIALOG
       ============================== */}
       <Dialog
-        open={open}
-        onClose={() => setOpen(false)}
-        maxWidth="md"
-        fullWidth
-      >
+  open={open}
+  onClose={() => setOpen(false)}
+  maxWidth="md"
+  fullWidth
+  PaperProps={{
+    sx: {
+      borderRadius: "20px",
+      backdropFilter: "blur(12px)",
+      background: "rgba(255,255,255,0.9)",
+      boxShadow: "0 20px 60px rgba(0,0,0,0.2)",
+    },
+  }}
+>
         <DialogTitle>Edit Patient</DialogTitle>
 
         <DialogContent>

@@ -13,6 +13,16 @@ export const uploadSignature = async (file) => {
   return res.data;
 };
 
+export const getClinicSettings = async () => {
+  const res = await API.get("/clinics/current");
+  return res.data;
+};
+
+export const updateClinicSettings = async (name, address, phone) => {
+  const res = await API.patch("/clinics/current", { name, address, phone });
+  return res.data;
+};
+
 export const getAllSignatures = async () => {
   const res = await API.get("/patients/signatures");
   return res.data;

@@ -686,6 +686,12 @@ async (req, res) => {
         [clinicId, doctor, from, to]
       );
 
+      const [clinicRows] = await db.query(
+        "SELECT name FROM clinics WHERE id = ?",
+        [clinicId]
+      );
+      const clinicName = clinicRows[0]?.name || "SRIDEVI CT SCAN & DIAGNOSTIC CENTER";
+
       const doc = new PDFDocument({ margin: 50, size: "A4" });
 
       res.setHeader("Content-Type", "application/pdf");
@@ -704,7 +710,7 @@ async (req, res) => {
 
       doc.fontSize(20)
         .font("Helvetica-Bold")
-        .text("SRIDEVI CT SCAN & DIAGNOSTIC CENTER", { align: "center" });
+        .text(clinicName, { align: "center" });
 
       doc.fontSize(13)
         .font("Helvetica")
@@ -1061,6 +1067,12 @@ router.get("/daily-report-pdf/:date",protect, authorize("admin"), async (req, re
     try {
         const clinicId = req.user?.clinic_id ?? 1;
         const { date } = req.params;
+
+        const [clinicRows] = await db.query(
+          "SELECT name FROM clinics WHERE id = ?",
+          [clinicId]
+        );
+        const clinicName = clinicRows[0]?.name || "SRIDEVI CT SCAN & DIAGNOSTIC CENTER";
         
         // Get last settlement window
         const [settlementRows] = await db.query(
@@ -1171,7 +1183,7 @@ router.get("/daily-report-pdf/:date",protect, authorize("admin"), async (req, re
 
         /* HEADER */
         doc.fontSize(20).font("Helvetica-Bold")
-            .text("SRIDEVI CT SCAN & DIAGNOSTIC CENTER", { align: "center" });
+            .text(clinicName, { align: "center" });
 
         doc.fontSize(13).font("Helvetica")
             .text("Daily Financial Report", { align: "center" });
@@ -1454,6 +1466,12 @@ router.get("/settlement-pdf/:settlementId", protect, authorize("admin"), async (
         const clinicId = req.user?.clinic_id ?? 1;
         const { settlementId } = req.params;
 
+        const [clinicRows] = await db.query(
+          "SELECT name FROM clinics WHERE id = ?",
+          [clinicId]
+        );
+        const clinicName = clinicRows[0]?.name || "SRIDEVI CT SCAN & DIAGNOSTIC CENTER";
+
         // Get the specific settlement details
         const [settlementRows] = await db.query(
             `SELECT from_time, to_time, amount FROM settlements WHERE clinic_id = ? AND id = ?`,
@@ -1516,7 +1534,7 @@ router.get("/settlement-pdf/:settlementId", protect, authorize("admin"), async (
 
         doc.fontSize(20)
             .font("Helvetica-Bold")
-            .text("SRIDEVI CT SCAN & DIAGNOSTIC CENTER", { align: "center" });
+            .text(clinicName, { align: "center" });
 
         doc.fontSize(13)
             .font("Helvetica")
@@ -2236,6 +2254,14 @@ router.get("/invoice/pdf/:invoiceId", protect, authorize("admin", "staff"), asyn
     const invoiceId = req.params.invoiceId;
     console.log("Generating invoice PDF for:", invoiceId, "clinic:", clinicId);
 
+    const [clinicRows] = await db.query(
+      "SELECT name, address, phone FROM clinics WHERE id = ?",
+      [clinicId]
+    );
+    const clinicName = clinicRows[0]?.name || "SRIDEVI DIAGNOSTIC CENTER";
+    const clinicAddress = clinicRows[0]?.address || "Mahendranath Complex, Bus Stand Back Side, Nagarkurnool";
+    const clinicPhone = clinicRows[0]?.phone || "8977419348, 8977449348";
+
     const [rows] = await db.query(
       "SELECT * FROM patients WHERE invoice_id = ? AND clinic_id = ? ORDER BY upload_date ASC, id ASC",
       [invoiceId, clinicId]
@@ -2273,11 +2299,11 @@ router.get("/invoice/pdf/:invoiceId", protect, authorize("admin", "staff"), asyn
 
     // ================= HEADER =================
     doc.font("Helvetica-Bold").fontSize(18);
-    doc.text("SRIDEVI DIAGNOSTIC CENTER", margin, 50);
+    doc.text(clinicName, margin, 50);
 
     doc.font("Helvetica").fontSize(11);
-    doc.text("Mahendranath Complex, Bus Stand Back Side, Nagarkurnool", margin, 75);
-    doc.text("Phone: 8977419348, 8977449348", margin, 90);
+    doc.text(clinicAddress, margin, 75);
+    doc.text(`Phone: ${clinicPhone}`, margin, 90);
 
     // ================= INVOICE INFO =================
     doc.font("Helvetica-Bold").fontSize(13);
@@ -2418,6 +2444,13 @@ router.get("/invoice/public/:invoiceId", async (req, res) => {
     const patientData = rows[0];
     const clinicId = patientData?.clinic_id ?? 1;
 
+    const [clinicRows] = await db.query(
+      "SELECT name, address FROM clinics WHERE id = ?",
+      [clinicId]
+    );
+    const clinicName = clinicRows[0]?.name || "SRIDEVI DIAGNOSTIC CENTER";
+    const clinicAddress = clinicRows[0]?.address || "Mahendranath Complex, Bus Stand Back Side, Nagarkurnool";
+
     const PDFDocument = require("pdfkit");
     const dayjs = require("dayjs");
 
@@ -2453,10 +2486,10 @@ router.get("/invoice/public/:invoiceId", async (req, res) => {
     const formattedTotal = totalAmount.toFixed(2);
 
     doc.font("Helvetica-Bold").fontSize(18);
-    doc.text("SRIDEVI DIAGNOSTIC CENTER", margin, 50);
+    doc.text(clinicName, margin, 50);
 
     doc.font("Helvetica").fontSize(11);
-    doc.text("Mahendranath Complex, Bus Stand Back Side, Nagarkurnool", margin, 75);
+    doc.text(clinicAddress, margin, 75);
     doc.text("Phone: 8977419348, 8977449348", margin, 90);
 
     doc.font("Helvetica-Bold").fontSize(13);

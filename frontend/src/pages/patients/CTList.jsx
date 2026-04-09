@@ -20,6 +20,7 @@ import {
   Grid,
   Autocomplete,
 } from "@mui/material";
+import { useAuth } from "../../context/AuthContext";
 import { DataGrid } from "@mui/x-data-grid";
 import EditIcon from "@mui/icons-material/Edit";
 import FileDownloadIcon from "@mui/icons-material/FileDownload";
@@ -186,7 +187,9 @@ const handleDownloadInvoice = async (invoiceId) => {
   }
 };
 
-const toWhatsAppNumber = (mobile) => {
+const { user } = useAuth();
+
+  const toWhatsAppNumber = (mobile) => {
   // WhatsApp expects digits only with country code (no +, no spaces)
   const digits = String(mobile || "").replace(/\D/g, "");
   if (!digits) return null;
@@ -195,7 +198,7 @@ const toWhatsAppNumber = (mobile) => {
   return digits; // fallback for other formats/countries
 };
 
-const CENTER_NAME = "SRIDEVI DIAGNOSTIC CENTER";
+const CENTER_NAME = user?.clinic_name || "SRIDEVI DIAGNOSTIC CENTER";
 
 const formatInvoiceMessage = (patientRow, allScans, invoiceUrl) => {
   const name = patientRow.patient_name || "-";
