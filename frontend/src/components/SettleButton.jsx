@@ -48,9 +48,10 @@ const SettleButton = ({ onSettlementComplete }) => {
       };
       setReportData(normalized);
       setReportOpen(true);
-      // Dispatch event to notify other pages (like DailyReport) about settlement
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new Event("settlementComplete"));
+      
+      // Silently update dashboard data in background while showing report
+      if (onSettlementComplete) {
+        await onSettlementComplete();
       }
     } catch (err) {
       console.error("Settlement error:", err);
@@ -156,10 +157,6 @@ const SettleButton = ({ onSettlementComplete }) => {
         open={reportOpen}
         onClose={() => {
           setReportOpen(false);
-          // Refresh dashboard when report dialog closes
-          if (onSettlementComplete) {
-            onSettlementComplete();
-          }
         }}
         maxWidth="sm"
         fullWidth

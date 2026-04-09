@@ -1982,8 +1982,8 @@ router.get("/dashboard-summary", protect, authorize("admin"), async (req, res) =
     );
     const referralBalance = Number(referralBalanceRows[0].referral_balance || 0);
     
-    // UPDATED: Total Counter = (All-time Income - All-time Expenses) - Total Settled + Referral Balance
-    const totalCounter = Math.max(0, overallNet - totalSettled + referralBalance);
+    // Total Counter = (All-time Income - All-time Expenses) - Total Settled + Referral Balance
+    const totalCounter = overallNet - totalSettled + referralBalance;
 
     res.json({
       /* Today's data */
