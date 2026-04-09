@@ -119,7 +119,7 @@ const SettleButton = ({ onSettlementComplete }) => {
         sx={{
           textTransform: "none",
           fontWeight: 600,
-          px: 2.5,
+          px: isMobile ? 1.5 : 2.5,
           py: 1.25,
         }}
       >
