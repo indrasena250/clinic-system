@@ -643,13 +643,21 @@ router.get(
   async (req, res) => {
     const clinicId = req.user?.clinic_id ?? 1;
     const { doctor } = req.params;
+    const { from, to } = req.query;
 
     try {
-      const [rows] = await pool.query(
-        `SELECT upload_date, patient_name, scan_name, referral_amount
-         FROM patients WHERE clinic_id = ? AND referred_doctor = ? ORDER BY upload_date ASC`,
-        [clinicId, doctor]
-      );
+      let query = `SELECT upload_date, patient_name, scan_name, referral_amount
+                   FROM patients WHERE clinic_id = ? AND referred_doctor = ?`;
+      let params = [clinicId, doctor];
+
+      if (from && to) {
+        query += ` AND DATE(upload_date) BETWEEN ? AND ?`;
+        params.push(from, to);
+      }
+
+      query += ` ORDER BY upload_date ASC`;
+
+      const [rows] = await pool.query(query, params);
       res.json(rows);
     } catch (error) {
       console.error(error);
@@ -765,6 +773,11 @@ async (req, res) => {
 
       rows.forEach((row) => {
 
+        const referral = Number(row.referral_amount) || 0;
+
+        // Skip rows with zero referral
+        if (referral === 0) return;
+
         if (y + rowHeight > pageHeight - 150) {
           doc.addPage();
           y = margin;
@@ -773,8 +786,6 @@ async (req, res) => {
 
         const date = dayjs(row.upload_date).format("DD-MM-YYYY");
         const day = dayjs(row.upload_date).format("dddd");
-
-        const referral = Number(row.referral_amount) || 0;
 
         totalReferral += referral;
 

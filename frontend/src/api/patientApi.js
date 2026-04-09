@@ -25,8 +25,13 @@ export const updateReferral = async (id, data) => {
   const res = await API.put(`/patients/referral/${id}`, data);
   return res.data;
 };
-export const fetchDoctorSettlement = async (doctor) => {
-  const res = await API.get(`/patients/doctor-settlement/${doctor}`);
+export const fetchDoctorSettlement = async (doctor, fromDate, toDate) => {
+  const params = {};
+  if (fromDate && toDate) {
+    params.from = fromDate;
+    params.to = toDate;
+  }
+  const res = await API.get(`/patients/doctor-settlement/${doctor}`, { params });
   return res.data;
 };
 export const fetchDoctors = async () => {

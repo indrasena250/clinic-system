@@ -98,16 +98,6 @@ const DashboardLayout = () => {
         </ListItemButton>
 
         <ListItemButton
-          selected={isActive("/patients/ct")}
-          onClick={() => navigate("/patients/ct")}
-        >
-          <ListItemIcon>
-            <ScanIcon />
-          </ListItemIcon>
-          <ListItemText primary="CT List" />
-        </ListItemButton>
-
-        <ListItemButton
           selected={isActive("/patients/ultrasound")}
           onClick={() => navigate("/patients/ultrasound")}
         >
@@ -115,6 +105,16 @@ const DashboardLayout = () => {
             <ScanIcon />
           </ListItemIcon>
           <ListItemText primary="Ultrasound List" />
+        </ListItemButton>
+
+        <ListItemButton
+          selected={isActive("/patients/ct")}
+          onClick={() => navigate("/patients/ct")}
+        >
+          <ListItemIcon>
+            <ScanIcon />
+          </ListItemIcon>
+          <ListItemText primary="CT List" />
         </ListItemButton>
 
         <Divider sx={{ my: 1 }} />

@@ -93,11 +93,11 @@ const handleDownload = async () => {
      LOAD SETTLEMENT
   =============================== */
 
-  const loadSettlement = async (doctorName) => {
+  const loadSettlement = async (doctorName, fromDate, toDate) => {
     if (!doctorName) return;
 
     try {
-      const data = await fetchDoctorSettlement(doctorName);
+      const data = await fetchDoctorSettlement(doctorName, fromDate, toDate);
 
       const mapped = data.map((item, idx) => ({
         id: idx + 1,
@@ -121,9 +121,19 @@ const handleDownload = async () => {
 
   useEffect(() => {
     if (doctor) {
-      loadSettlement(doctor);
+      loadSettlement(doctor, fromDate, toDate);
     }
   }, [doctor]);
+
+  /* ===============================
+     WHEN DATE CHANGES, RELOAD IF DOCTOR SELECTED
+  =============================== */
+
+  useEffect(() => {
+    if (doctor && (fromDate || toDate)) {
+      loadSettlement(doctor, fromDate, toDate);
+    }
+  }, [fromDate, toDate]);
 
   /* ===============================
      DATE FILTER
