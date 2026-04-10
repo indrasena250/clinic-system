@@ -597,7 +597,7 @@ const handleSendWhatsApp = async (row) => {
       {error && <Alert severity="error">{error}</Alert>}
 
       {isMd ? (
-        <Box sx={{ display: "flex", flexDirection: "column", gap: 1, px: 0 }}>
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 1, px: 0, pt: 1 }}>
           {filteredRows.map((row) => (
             <Card key={row.id} sx={{
               borderRadius: 3,
@@ -616,7 +616,7 @@ const handleSendWhatsApp = async (row) => {
               <Box sx={{
                 background: "linear-gradient(135deg, #3659a5, #4c3aaf)",
                 color: "white",
-                p: 2,
+                p: 1,
                 position: "relative"
               }}>
                 <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
