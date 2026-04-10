@@ -4,7 +4,7 @@ export const scanPrices = {
   "USG KUB": 800,
   "USG Swelling": 800,
   "Early Pregnancy Scan": 800,
-  "Growth Scan /ANC": 800,
+  "Growth Scan": 800,
   "USG Breast": 900,
   "USG Neck": 900,
   "USG Scrotum": 900,
@@ -24,14 +24,18 @@ export const scanPrices = {
   "CT PNS": 4500,
   "CT TEMPORAL BONES": 4500,
   "CT 3D FACIAL": 4500,
-  "CT UPPER/LOWER LIMBS": 4500,
+  "CT UPPER LIMBS": 4500,
+  "CT LOWER LIMBS": 4500,
   "CT NECK": 5000,
   "CT SHOULDER": 5000,
-  "CT CHEST/HRCT": 5000,
+  "HRCT CHEST": 5000,
+  "CT CHEST": 5000,
   "CT ABDOMEN": 5000,
   "CT KUB": 5000,
   "CT PELVIS": 5000,
-  "CT SPINE (CS,DS,LS)": 5000
+  "CT C SPINE": 5000,
+  "CT D SPINE": 5000,
+  "CT L SPINE": 5000
 };
 
 export const usgScans = [
@@ -39,7 +43,7 @@ export const usgScans = [
   "USG KUB",
   "USG Swelling",
   "Early Pregnancy Scan",
-  "Growth Scan /ANC",
+  "Growth Scan",
   "USG Breast",
   "USG Neck",
   "USG Scrotum",
@@ -61,12 +65,16 @@ export const ctScans = [
   "CT PNS",
   "CT TEMPORAL BONES",
   "CT 3D FACIAL",
-  "CT UPPER/LOWER LIMBS",
+  "CT UPPER LIMBS",
+  "CT LOWER LIMBS",
   "CT NECK",
   "CT SHOULDER",
-  "CT CHEST/HRCT",
+  "HRCT CHEST",
+  "CT CHEST",
   "CT ABDOMEN",
   "CT KUB",
   "CT PELVIS",
-  "CT SPINE (CS,DS,LS)"
+  "CT C SPINE",
+  "CT D SPINE",
+  "CT L SPINE"
 ];

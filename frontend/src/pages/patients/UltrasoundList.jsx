@@ -300,22 +300,24 @@ const UltrasoundList = () => {
   const columns = [
     {
       field: "slno",
-      headerName: "SL No",
-      flex: 0.3,
-      minWidth: 40,
+      headerName: "Sl No",
+      flex: 0.342,
+      minWidth: 30,
       align: "left",
       headerAlign: "left",
+      display: 'flex',
     },
     {
       field: "upload_date",
       headerName: "Date & Time",
-      flex: 1.2,
+      flex: 1.1,
       minWidth: 120,
       align: "left",
       headerAlign: "left",
+      display: 'flex',
       renderCell: (params) => (
-        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, height: "100%" }}>
-          <Typography sx={{ fontSize: "14px", color: "#666" }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.2, height: "100%" }}>
+          <Typography sx={{ fontSize: "13px", color: "#000000" }}>
             {formatDate(params.value)}
           </Typography>
           <Chip
@@ -325,7 +327,7 @@ const UltrasoundList = () => {
               backgroundColor: "#2196F3",
               color: "#fff",
               fontWeight: "bold",
-              fontSize: "12px",
+              fontSize: "11px",
               height: "20px",
             }}
           />
@@ -336,22 +338,24 @@ const UltrasoundList = () => {
       field: "id",
       headerName: "ID",
       flex: 0.4,
-      minWidth: 50,
+      minWidth: 30,
       align: "left",
       headerAlign: "left",
+      display: 'flex',
     },
-    { field: "patient_name", headerName: "Patient Name", flex: 1.2, minWidth: 100, align: "left", headerAlign: "left" },
-    { field: "age", headerName: "Age", flex: 0.3, minWidth: 40, align: "left", headerAlign: "left" },
-    { field: "gender", headerName: "Gender", flex: 0.5, minWidth: 60, align: "left", headerAlign: "left" },
+    { field: "patient_name", headerName: "Patient Name", flex: 1.1,display: 'flex',  minWidth: 100, align: "left", headerAlign: "left" },
+    { field: "age", headerName: "Age", flex: 0.3,display: 'flex', minWidth: 10, align: "left", headerAlign: "left" },
+    { field: "gender", headerName: "Gender", flex: 0.44,display: 'flex', minWidth: 30, align: "left", headerAlign: "left"},
     {
       field: "scan_name",
       headerName: "Scan Name",
-      flex: 0.9,
+      flex: 0.8,
       minWidth: 90,
       align: "left",
       headerAlign: "left",
+      display: 'flex',
       renderCell: (params) => (
-        <Typography sx={{ fontSize: 14, whiteSpace: "normal", wordBreak: "break-word" }}>
+        <Typography sx={{ fontSize: 13, whiteSpace: "normal", wordBreak: "break-word" }}>
           {params.value || "-"}
         </Typography>
       ),
@@ -359,17 +363,18 @@ const UltrasoundList = () => {
     {
       field: "referred_doctor",
       headerName: "Doctor",
-      flex: 0.9,
-      minWidth: 90,
+      flex: 1.15,
+      minWidth: 50,
       align: "left",
       headerAlign: "left",
+      display: 'flex',
       renderCell: (params) => (
-        <Typography sx={{ fontSize: 14, whiteSpace: "normal", wordBreak: "break-word" }}>
+        <Typography sx={{ fontSize: 12.5, whiteSpace: "normal", wordBreak: "break-word" }}>
           {params.value || "-"}
         </Typography>
       ),
     },
-    { field: "mobile", headerName: "Mobile", flex: 0.8, minWidth: 90, align: "left", headerAlign: "left" },
+    { field: "mobile", headerName: "Mobile", flex: 0.65, display: 'flex',minWidth: 90, align: "left", headerAlign: "left" },
     {
       field: "address",
       headerName: "Address",
@@ -377,8 +382,9 @@ const UltrasoundList = () => {
       minWidth: 100,
       align: "left",
       headerAlign: "left",
+      display: 'flex',
       renderCell: (params) => (
-        <Typography sx={{ fontSize: 14, whiteSpace: "normal", wordBreak: "break-word" }}>
+        <Typography sx={{ fontSize: 13, whiteSpace: "normal", wordBreak: "break-word" }}>
           {params.value || "-"}
         </Typography>
       ),
@@ -390,22 +396,24 @@ const UltrasoundList = () => {
       minWidth: 65,
       align: "left",
       headerAlign: "left",
+      display: 'flex',
       renderCell: (params) => `₹ ${params.value}`,
     },
     {
       field: "tools",
       headerName: "Actions",
-      flex: 0.8,
-      minWidth: 90,
+      flex: 0.5,
+      minWidth: 93,
       sortable: false,
       filterable: false,
       align: "left",
       headerAlign: "left",
+      display: 'flex',
       renderCell: (params) => (
         <Box sx={{
           display: "flex",
           flexDirection: "row",
-          gap: 0.5,
+          gap: 0.01,
           alignItems: "center",
           justifyContent: "flex-start",
           width: "100%",
@@ -485,7 +493,7 @@ const UltrasoundList = () => {
   return (
   <Paper
     sx={{
-      p: 3,
+      p: 2.5,
       borderRadius: "20px",
       background: "rgba(255,255,255,0.7)",
       backdropFilter: "blur(12px)",
@@ -499,9 +507,9 @@ const UltrasoundList = () => {
     flexWrap: "wrap",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 2,
-    mb: 3,
-    pb: 2,
+    gap: 1,
+    mb: 0.1,
+    pb: 1,
     borderBottom: "1px solid rgba(0,0,0,0.06)",
   }}
 >
@@ -523,7 +531,7 @@ const UltrasoundList = () => {
   </Box>
 
   {/* FILTER BUTTONS */}
-  <Box sx={{ display: "flex", flexWrap: "wrap" }}>
+  <Box sx={{ display: "flex",flexWrap: "nowrap", }}>
     {[
       { key: "today", label: "Today" },
       { key: "yesterday", label: "Yesterday" },
@@ -535,12 +543,14 @@ const UltrasoundList = () => {
         key={item.key}
         onClick={() => setFilterRange(item.key)}
         sx={{
-          borderRadius: "999px",
-          px: isMd ? 0.5:2,
-          py: 0.6,
+          borderRadius: "10px",
+          px: isMd ? 0:3,
+          py: isMd ? 0.2:0.6,
           fontSize: "0.8rem",
           textTransform: "none",
           fontWeight: 600,
+          flexShrink: 0,
+          whiteSpace: "nowrap",
           background:
             filterRange === item.key
               ? "linear-gradient(135deg,#1976d2,#42a5f5)"
@@ -583,7 +593,7 @@ const UltrasoundList = () => {
       {error && <Alert severity="error">{error}</Alert>}
 
       {isMd ? (
-        <Box sx={{ display: "flex", flexDirection: "column", gap: 2, px: 1 }}>
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 1, px: 1 }}>
           {filteredRows.map((row) => (
             <Card key={row.id} sx={{
               borderRadius: 3,
@@ -600,7 +610,7 @@ const UltrasoundList = () => {
             }}>
               {/* Header Section */}
               <Box sx={{
-                background: "linear-gradient(135deg, #5f9cff, #7b61ff)",
+                background: "linear-gradient(135deg, #3659a5, #4c3aaf)",
                 color: "white",
                 p: 2,
                 position: "relative"
@@ -621,25 +631,26 @@ const UltrasoundList = () => {
                           fontSize: "0.75rem"
                         }}
                       />
-                      <Typography variant="caption" sx={{ opacity: 0.9 }}>
-                        SL: #{row.slno}
-                      </Typography>
+                      
                     </Box>
                   </Box>
                   <Box sx={{ textAlign: "right" }}>
-                    <Typography variant="body2" sx={{ opacity: 0.9, fontSize: "0.8rem" }}>
+                    <Typography variant="body2" sx={{ opacity: 0.9, fontSize: "0.8rem", py: 0.7}}>
                       {row.upload_date ? formatDateTime(row.upload_date) : "-"}
                     </Typography>
+                    <Typography variant="caption" sx={{ opacity: 0.9 }}>
+                        SL: #{row.slno}
+                      </Typography>
                   </Box>
                 </Box>
               </Box>
 
               {/* Content Section */}
-              <CardContent sx={{ p: 2 }}>
-                <Grid container spacing={2}>
+              <CardContent sx={{ p: 1.5 }}>
+                <Grid container spacing={1}>
                   {/* Scan Details */}
                   <Grid item xs={12}>
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
+                    <Box sx={{ display: "flex", pt: 0.5, alignItems: "center", gap: 1, mb: 0.01, mt: 0.01 }}>
                       <Box sx={{
                         width: 8,
                         height: 8,
@@ -647,40 +658,77 @@ const UltrasoundList = () => {
                         backgroundColor: "#ff6b6b"
                       }} />
                       <Typography variant="subtitle2" sx={{ fontWeight: 600, color: "#333" }}>
-                        Scan Details
+                        Scan Details :
                       </Typography>
-                    </Box>
-                    <Typography variant="body1" sx={{ fontWeight: 500, color: "#555" }}>
+                    
+                    <Typography variant="body1" sx={{ fontWeight: 500, color: "#000000" }}>
                       {row.scan_name || "-"}
                     </Typography>
+                    </Box>
+                  </Grid>
                   </Grid>
 
                   {/* Doctor & Patient Info */}
                   <Grid item xs={6}>
-                    <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    <Box sx={{ display: "flex", pt: 1, flexDirection: "row", gap: 1.5,justifyContent: "space-between", width: "100%" }}>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.1 }}>
                         <PersonIcon sx={{ fontSize: 16, color: "#666" }} />
-                        <Typography variant="body2" sx={{ color: "#666" }}>
+                        <Typography variant="body2" sx={{ color: "#000000" }}>
                           {row.referred_doctor || "-"}
                         </Typography>
                       </Box>
-                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                      <Box sx={{ display: "flex",alignItems: "center", gap: 1 }}>  
+                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
                           {row.gender || "-"}, {row.age || "-"}
                         </Typography>
-                      </Box>
+                        </Box>
                     </Box>
                   </Grid>
 
+                  
+
                   <Grid item xs={6}>
-                    <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                    <Box sx={{ display: "flex", pt: 1, flexDirection: "row", gap: 1.5,justifyContent: "space-between", width: "100%" }}>
                       <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                        <PhoneIcon sx={{ fontSize: 16, color: "#666" }} />
-                        <Typography variant="body2" sx={{ color: "#666" }}>
-                          {row.mobile || "-"}
-                        </Typography>
+                        {/* MOBILE (Premium Clickable) */}
+                          <Box
+                            component="a"
+                            href={row.mobile ? `tel:${row.mobile}` : undefined}
+                            sx={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 0.5,
+                              px: 1,
+                              py: 0.3,
+                              borderRadius: "20px",
+                              background: "rgba(25,118,210,0.08)",
+                              color: "#1976d2",
+                              textDecoration: "none",
+                              cursor: row.mobile ? "pointer" : "default",
+                              transition: "all 0.25s ease",
+
+                              "&:hover": row.mobile
+                                ? {
+                                    background: "rgba(25,118,210,0.18)",
+                                    transform: "scale(1.05)",
+                                  }
+                                : {},
+                            }}
+                          >
+                            <PhoneIcon sx={{ fontSize: 16 }} />
+
+                            <Typography
+                              sx={{
+                                fontSize: 15,
+                                fontWeight: 700,
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {row.mobile || "-"}
+                            </Typography>
+                          </Box>
                       </Box>
-                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.1 }}>
                         <LocationOnIcon sx={{ fontSize: 16, color: "#666" }} />
                         <Typography variant="body2" sx={{ color: "#666" }}>
                           {row.address || "-"}
@@ -688,12 +736,12 @@ const UltrasoundList = () => {
                       </Box>
                     </Box>
                   </Grid>
-                </Grid>
+                
 
                 {/* Amount & Actions */}
                 <Box sx={{
-                  mt: 2,
-                  pt: 2,
+                  mt: 1,
+                  pt: 1,
                   borderTop: "1px solid rgba(0,0,0,0.08)",
                   display: "flex",
                   justifyContent: "space-between",
@@ -764,7 +812,7 @@ const UltrasoundList = () => {
             rows={filteredRows}
             columns={columns}
             loading={loading}
-            pageSizeOptions={[5, 10, 20]}
+            pageSizeOptions={[5, 10, 20, 50]}
             initialState={{
               pagination: { paginationModel: { pageSize: 10, page: 0 } },
             }}
@@ -772,28 +820,29 @@ const UltrasoundList = () => {
             autoHeight
             disableSelectionOnClick
             sx={{
-  border: "none",
-  fontSize: "0.85rem",
+              border: "none",
+              fontSize: "0.82rem",
 
-  "& .MuiDataGrid-columnHeaders": {
-    background: "rgba(0,0,0,0.04)",
-    borderRadius: "10px",
-    fontWeight: 600,
-  },
+              "& .MuiDataGrid-columnHeaders": {
+                background: "rgba(0,0,0,0.04)",
+                borderRadius: "10px",
+                fontWeight: 600,
+                py: 0.01,
+              },
 
-  "& .MuiDataGrid-row": {
-    borderRadius: "10px",
-    transition: "all 0.2s",
-    "&:hover": {
-      backgroundColor: "rgba(25,118,210,0.05)",
-      transform: "scale(1.002)",
-    },
-  },
+              "& .MuiDataGrid-row": {
+                borderRadius: "10px",
+                transition: "all 0.2s",
+                "&:hover": {
+                  backgroundColor: "rgba(25,118,210,0.05)",
+                  transform: "scale(1.002)",
+                },
+              },
 
-  "& .MuiDataGrid-cell": {
-    borderBottom: "1px solid rgba(0,0,0,0.05)",
-  },
-}}
+              "& .MuiDataGrid-cell": {
+                borderBottom: "1px solid rgba(0,0,0,0.05)",
+              },
+            }}
           />
         </div>
       )}

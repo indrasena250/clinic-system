@@ -295,22 +295,24 @@ const handleSendWhatsApp = async (row) => {
   const columns = [
     {
       field: "slno",
-      headerName: "SL No",
-      flex: 0.3,
-      minWidth: 40,
+      headerName: "Sl No",
+      flex: 0.342,
+      minWidth: 30,
       align: "left",
       headerAlign: "left",
+      display: 'flex',
     },
     {
       field: "upload_date",
       headerName: "Date & Time",
-      flex: 1.2,
+      flex: 1.1,
       minWidth: 120,
       align: "left",
       headerAlign: "left",
+      display: 'flex',
       renderCell: (params) => (
-        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, height: "100%" }}>
-          <Typography sx={{ fontSize: "14px", color: "#666" }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.2, height: "100%" }}>
+          <Typography sx={{ fontSize: "13px", color: "#666" }}>
             {formatDate(params.value)}
           </Typography>
           <Chip
@@ -320,7 +322,7 @@ const handleSendWhatsApp = async (row) => {
               backgroundColor: "#2196F3",
               color: "#fff",
               fontWeight: "bold",
-              fontSize: "12px",
+              fontSize: "11px",
               height: "20px",
             }}
           />
@@ -331,22 +333,24 @@ const handleSendWhatsApp = async (row) => {
       field: "id",
       headerName: "ID",
       flex: 0.4,
-      minWidth: 50,
+      minWidth: 30,
       align: "left",
       headerAlign: "left",
+      display: 'flex',
     },
-    { field: "patient_name", headerName: "Patient Name", flex: 1.2, minWidth: 100, align: "left", headerAlign: "left" },
-    { field: "age", headerName: "Age", flex: 0.3, minWidth: 40, align: "left", headerAlign: "left" },
-    { field: "gender", headerName: "Gender", flex: 0.5, minWidth: 60, align: "left", headerAlign: "left" },
+    { field: "patient_name", headerName: "Patient Name", flex: 1.1,display: 'flex', minWidth: 100, align: "left", headerAlign: "left" },
+    { field: "age", headerName: "Age", flex: 0.3,display: 'flex', minWidth: 10, align: "left", headerAlign: "left" },
+    { field: "gender", headerName: "Gender", flex: 0.44, display: 'flex',minWidth: 30, align: "left", headerAlign: "left" },
     {
       field: "scan_name",
       headerName: "Scan Name",
-      flex: 0.9,
+      flex: 0.8,
       minWidth: 90,
       align: "left",
       headerAlign: "left",
+      display: 'flex',
       renderCell: (params) => (
-        <Typography sx={{ fontSize: 14, whiteSpace: "normal", wordBreak: "break-word" }}>
+        <Typography sx={{ fontSize: 13, whiteSpace: "normal", wordBreak: "break-word" }}>
           {params.value || "-"}
         </Typography>
       ),
@@ -354,17 +358,18 @@ const handleSendWhatsApp = async (row) => {
     {
       field: "referred_doctor",
       headerName: "Doctor",
-      flex: 0.9,
-      minWidth: 90,
+      flex: 1.15,
+      minWidth: 50,
       align: "left",
       headerAlign: "left",
+      display: 'flex',
       renderCell: (params) => (
-        <Typography sx={{ fontSize: 14, whiteSpace: "normal", wordBreak: "break-word" }}>
+        <Typography sx={{ fontSize: 12.5, whiteSpace: "normal", wordBreak: "break-word" }}>
           {params.value || "-"}
         </Typography>
       ),
     },
-    { field: "mobile", headerName: "Mobile", flex: 0.8, minWidth: 90, align: "left", headerAlign: "left" },
+    { field: "mobile", headerName: "Mobile", flex: 0.65, display: 'flex',minWidth: 90, align: "left", headerAlign: "left" },
     {
       field: "address",
       headerName: "Address",
@@ -372,8 +377,9 @@ const handleSendWhatsApp = async (row) => {
       minWidth: 100,
       align: "left",
       headerAlign: "left",
+      display: 'flex',
       renderCell: (params) => (
-        <Typography sx={{ fontSize: 14, whiteSpace: "normal", wordBreak: "break-word" }}>
+        <Typography sx={{ fontSize: 13, whiteSpace: "normal", wordBreak: "break-word" }}>
           {params.value || "-"}
         </Typography>
       ),
@@ -385,22 +391,24 @@ const handleSendWhatsApp = async (row) => {
       minWidth: 65,
       align: "left",
       headerAlign: "left",
+      display: 'flex',
       renderCell: (params) => `₹ ${params.value}`,
     },
     {
       field: "tools",
       headerName: "Actions",
-      flex: 0.8,
-      minWidth: 90,
+      flex: 0.5,
+      minWidth: 93,
       sortable: false,
       filterable: false,
       align: "left",
       headerAlign: "left",
+      display: 'flex',
       renderCell: (params) => (
         <Box sx={{
           display: "flex",
           flexDirection: "row",
-          gap: 0.5,
+          gap: 0.01,
           alignItems: "center",
           justifyContent: "flex-start",
           width: "100%",
@@ -479,13 +487,46 @@ const handleSendWhatsApp = async (row) => {
   }));
 
   return (
-    <Paper sx={{ p: 3 }}>
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2, flexWrap: "wrap", gap: 1 }}>
-        <Typography variant="h5" fontWeight="bold">
-          CT Patients
-        </Typography>
+    <Paper
+      sx={{
+        p: 2.5,
+        borderRadius: "20px",
+        background: "rgba(255,255,255,0.7)",
+        backdropFilter: "blur(12px)",
+        border: "1px solid rgba(255,255,255,0.3)",
+        boxShadow: "0 10px 40px rgba(0,0,0,0.08)",
+      }}
+    >
+      <Box
+        sx={{
+          display: "flex",
+          flexWrap: "wrap",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 1,
+          mb: 0.1,
+          pb: 1,
+          borderBottom: "1px solid rgba(0,0,0,0.06)",
+        }}
+      >
+        {/* TITLE */}
+        <Box>
+          <Typography
+            sx={{
+              fontSize: "1.6rem",
+              fontWeight: 700,
+              letterSpacing: "-0.5px",
+            }}
+          >
+            CT Patients
+          </Typography>
 
-        <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", justifyContent: "center", flex: 1 }}>
+          <Typography sx={{ fontSize: 13, color: "text.secondary" }}>
+            Manage patient records, invoices & reports
+          </Typography>
+        </Box>
+
+        <Box sx={{ display: "flex", flexWrap: "nowrap" }}>
           {[
             { key: "today", label: "Today" },
             { key: "yesterday", label: "Yesterday" },
@@ -495,9 +536,26 @@ const handleSendWhatsApp = async (row) => {
           ].map((item) => (
             <Button
               key={item.key}
-              variant={filterRange === item.key ? "contained" : "outlined"}
-              size="small"
               onClick={() => setFilterRange(item.key)}
+              sx={{
+                borderRadius: "10px",
+                px: isMd ? 0 : 3,
+                py: isMd ? 0.2 : 0.6,
+                fontSize: "0.8rem",
+                textTransform: "none",
+                fontWeight: 600,
+                flexShrink: 0,
+                whiteSpace: "nowrap",
+                background:
+                  filterRange === item.key
+                    ? "linear-gradient(135deg,#1976d2,#42a5f5)"
+                    : "rgba(0,0,0,0.04)",
+                color: filterRange === item.key ? "#fff" : "#555",
+                transition: "all 0.25s",
+                "&:hover": {
+                  transform: "translateY(-2px)",
+                },
+              }}
             >
               {item.label}
             </Button>
@@ -509,6 +567,13 @@ const handleSendWhatsApp = async (row) => {
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           placeholder="Search patient, mobile, doctor..."
+          sx={{
+            minWidth: 260,
+            "& .MuiOutlinedInput-root": {
+              borderRadius: "999px",
+              background: "rgba(0,0,0,0.03)",
+            },
+          }}
           InputProps={{
             endAdornment: searchTerm ? (
               <IconButton size="small" onClick={() => setSearchTerm("")}>
@@ -516,20 +581,20 @@ const handleSendWhatsApp = async (row) => {
               </IconButton>
             ) : null,
           }}
-          sx={{ minWidth: 250 }}
         />
       </Box>
 
       {error && <Alert severity="error">{error}</Alert>}
 
       {isMd ? (
-        <Box sx={{ display: "flex", flexDirection: "column", gap: 2, px: 1 }}>
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 1, px: 1 }}>
           {filteredRows.map((row) => (
             <Card key={row.id} sx={{
               borderRadius: 3,
               boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
               border: "1px solid rgba(255,107,107,0.1)",
-              background: "linear-gradient(135deg, #ffffff 0%, #fafafa 100%)",
+              background: "rgba(255,255,255,0.85)",
+              backdropFilter: "blur(10px)",
               overflow: "hidden",
               transition: "all 0.3s ease",
               "&:hover": {
@@ -539,7 +604,7 @@ const handleSendWhatsApp = async (row) => {
             }}>
               {/* Header Section */}
               <Box sx={{
-                background: "linear-gradient(135deg, #0933f0 0%, #8d23f7 100%)",
+                background: "linear-gradient(135deg, #3659a5, #4c3aaf)",
                 color: "white",
                 p: 2,
                 position: "relative"
@@ -560,25 +625,25 @@ const handleSendWhatsApp = async (row) => {
                           fontSize: "0.75rem"
                         }}
                       />
-                      <Typography variant="caption" sx={{ opacity: 0.9 }}>
-                        SL: #{row.slno}
-                      </Typography>
                     </Box>
                   </Box>
                   <Box sx={{ textAlign: "right" }}>
-                    <Typography variant="body2" sx={{ opacity: 0.9, fontSize: "0.8rem" }}>
+                    <Typography variant="body2" sx={{ opacity: 0.9, fontSize: "0.8rem", py: 0.7 }}>
                       {row.upload_date ? formatDateTime(row.upload_date) : "-"}
+                    </Typography>
+                    <Typography variant="caption" sx={{ opacity: 0.9 }}>
+                      SL: #{row.slno}
                     </Typography>
                   </Box>
                 </Box>
               </Box>
 
               {/* Content Section */}
-              <CardContent sx={{ p: 2 }}>
-                <Grid container spacing={2}>
+              <CardContent sx={{ p: 1.5 }}>
+                <Grid container spacing={1}>
                   {/* Scan Details */}
                   <Grid item xs={12}>
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
+                    <Box sx={{ display: "flex", pt: 0.5, alignItems: "center", gap: 1, mb: 0.01, mt: 0.01 }}>
                       <Box sx={{
                         width: 8,
                         height: 8,
@@ -586,20 +651,20 @@ const handleSendWhatsApp = async (row) => {
                         backgroundColor: "#ff6b6b"
                       }} />
                       <Typography variant="subtitle2" sx={{ fontWeight: 600, color: "#333" }}>
-                        Scan Details
+                        Scan Details :
+                      </Typography>
+                      <Typography variant="body1" sx={{ fontWeight: 500, color: "#000000" }}>
+                        {row.scan_name || "-"}
                       </Typography>
                     </Box>
-                    <Typography variant="body1" sx={{ fontWeight: 500, color: "#555" }}>
-                      {row.scan_name || "-"}
-                    </Typography>
+                  </Grid>
                   </Grid>
 
-                  {/* Doctor & Patient Info */}
                   <Grid item xs={6}>
-                    <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    <Box sx={{ display: "flex", pt: 1, flexDirection: "row", gap: 1.5, justifyContent: "space-between", width: "100%" }}>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.1 }}>
                         <PersonIcon sx={{ fontSize: 16, color: "#666" }} />
-                        <Typography variant="body2" sx={{ color: "#666" }}>
+                        <Typography variant="body2" sx={{ color: "#000000" }}>
                           {row.referred_doctor || "-"}
                         </Typography>
                       </Box>
@@ -611,15 +676,47 @@ const handleSendWhatsApp = async (row) => {
                     </Box>
                   </Grid>
 
+                
+
                   <Grid item xs={6}>
-                    <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                    <Box sx={{ display: "flex", pt: 1, flexDirection: "row", gap: 1.5,justifyContent: "space-between", width: "100%" }}>
                       <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                        <PhoneIcon sx={{ fontSize: 16, color: "#666" }} />
-                        <Typography variant="body2" sx={{ color: "#666" }}>
-                          {row.mobile || "-"}
-                        </Typography>
+                        <Box
+                          component="a"
+                          href={row.mobile ? `tel:${row.mobile}` : undefined}
+                          sx={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 0.5,
+                            px: 1,
+                            py: 0.3,
+                            borderRadius: "20px",
+                            background: "rgba(25,118,210,0.08)",
+                            color: "#1976d2",
+                            textDecoration: "none",
+                            cursor: row.mobile ? "pointer" : "default",
+                            transition: "all 0.25s ease",
+                            "&:hover": row.mobile
+                              ? {
+                                  background: "rgba(25,118,210,0.18)",
+                                  transform: "scale(1.05)",
+                                }
+                              : {},
+                          }}
+                        >
+                          <PhoneIcon sx={{ fontSize: 16 }} />
+                          <Typography
+                            sx={{
+                              fontSize: 15,
+                              fontWeight: 700,
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {row.mobile || "-"}
+                          </Typography>
+                        </Box>
                       </Box>
-                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 0.1 }}>
                         <LocationOnIcon sx={{ fontSize: 16, color: "#666" }} />
                         <Typography variant="body2" sx={{ color: "#666" }}>
                           {row.address || "-"}
@@ -627,12 +724,12 @@ const handleSendWhatsApp = async (row) => {
                       </Box>
                     </Box>
                   </Grid>
-                </Grid>
+                
 
                 {/* Amount & Actions */}
                 <Box sx={{
-                  mt: 2,
-                  pt: 2,
+                  mt: 1,
+                  pt: 1,
                   borderTop: "1px solid rgba(0,0,0,0.08)",
                   display: "flex",
                   justifyContent: "space-between",
@@ -703,38 +800,35 @@ const handleSendWhatsApp = async (row) => {
             rows={filteredRows}
             columns={columns}
             loading={loading}
-            pageSizeOptions={[5, 10, 20]}
+            pageSizeOptions={[5, 10, 20, 50]}
             initialState={{
-              pagination: {
-                paginationModel: { pageSize: 10, page: 0 },
-              },
+              pagination: { paginationModel: { pageSize: 10, page: 0 } },
             }}
             getRowHeight={() => "auto"}
             autoHeight
             disableSelectionOnClick
             sx={{
-              "& .MuiDataGrid-virtualScroller": {
-                overflowX: "hidden !important",
+              border: "none",
+              fontSize: "0.82rem",
+
+              "& .MuiDataGrid-columnHeaders": {
+                background: "rgba(0,0,0,0.04)",
+                borderRadius: "10px",
+                fontWeight: 600,
+                py: 0.01,
               },
-              "& .MuiDataGrid-cell": {
-                whiteSpace: "normal !important",
-                wordBreak: "break-word",
-                lineHeight: 1.3,
-                px: 0.5,
-                py: 0.5,
-                display: "flex",
-                alignItems: "center",
-              },
+
               "& .MuiDataGrid-row": {
-                maxHeight: "none !important",
+                borderRadius: "10px",
+                transition: "all 0.2s",
                 "&:hover": {
-                  backgroundColor: "#f5f5f5",
+                  backgroundColor: "rgba(25,118,210,0.05)",
+                  transform: "scale(1.002)",
                 },
               },
-              "& .MuiDataGrid-columnHeader": {
-                px: 0.5,
-                backgroundColor: "#f0f0f0",
-                fontWeight: "bold",
+
+              "& .MuiDataGrid-cell": {
+                borderBottom: "1px solid rgba(0,0,0,0.05)",
               },
             }}
           />

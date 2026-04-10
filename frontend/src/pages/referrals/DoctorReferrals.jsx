@@ -383,16 +383,16 @@ const DoctorReferral = () => {
             >
               <CardContent>
                 <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1 }}>
-                  <Typography sx={{ fontWeight: 700, fontSize: 16, color: "#0f1c6e" }}>
-                    {row.patient_name}
-                  </Typography>
+                  <Typography sx={{fontWeight: 700, fontSize: 16, color: "#0f1c6e"  }}><strong>Dr:</strong> {row.doctor}</Typography>
                   <Typography sx={{ fontSize: 12, color: "#65748b" }}>
                     {formatDateTime(row.upload_date)}
                   </Typography>
                 </Box>
 
-                <Typography sx={{ fontSize: 14, mb: 0.4 }}><strong>Scan:</strong> {row.scan_name}</Typography>
-                <Typography sx={{ fontSize: 14, mb: 0.4 }}><strong>Doctor:</strong> {row.doctor}</Typography>
+                <Typography sx={{  fontSize: 14, mb: 0.4 }}><strong>Patient Name: </strong>
+                    {row.patient_name}
+                  </Typography> 
+                  <Typography sx={{ fontSize: 14, mb: 0.4 }}><strong>Scan:</strong> {row.scan_name}</Typography>               
                 <Typography sx={{ fontSize: 14, mb: 1 }}><strong>Scan Amount:</strong> ₹{row.amount}</Typography>
 
                 <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
