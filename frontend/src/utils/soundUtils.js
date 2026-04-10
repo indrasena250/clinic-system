@@ -774,12 +774,24 @@ export const createWhisperErrorSound = (audioContext) => {
 };
 
 // Main playSound function that uses the selected sound from localStorage
-export const playSound = (type) => {
-  const selectedSound = type === "success"
-    ? localStorage.getItem("selectedSuccessSound") || "bell"
-    : localStorage.getItem("selectedErrorSound") || "gentle";
+export const playSound = (type, overrideSound = null, isPreview = false) => {
+  const selectedSound = overrideSound
+    || (type === "success"
+      ? localStorage.getItem("selectedSuccessSound") || "bell"
+      : localStorage.getItem("selectedErrorSound") || "gentle");
 
-  console.log('Playing sound:', type, 'using:', selectedSound);
+  console.log('Playing sound:', type, 'using:', selectedSound, isPreview ? '(preview)' : '');
+
+  if (selectedSound === "custom-success" || selectedSound === "custom-error") {
+    const urlKey = selectedSound === "custom-success" ? "customSuccessSoundUrl" : "customErrorSoundUrl";
+    const url = localStorage.getItem(urlKey);
+    if (url) {
+      const audio = new Audio(url);
+      audio.play().catch((error) => console.log('Custom audio playback failed:', error));
+      return;
+    }
+  }
+
   try {
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     const audioContext = new AudioContext();

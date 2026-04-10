@@ -11,11 +11,17 @@ import {
   CardMedia,
   Grid,
   TextField,
+  FormControl,
+  FormLabel,
+  RadioGroup,
+  FormControlLabel,
+  Radio,
   useTheme,
   useMediaQuery
 } from "@mui/material";
 import { CloudUpload, Image, Refresh, Delete } from "@mui/icons-material";
 import API from "../../api/axios";
+import { playSound } from "../../utils/soundUtils";
 import { uploadSignature, getAllSignatures, deleteSignature, getClinicSettings, updateClinicSettings } from "../../api/settingsApi";
 
 const UploadSignature = () => {
@@ -39,7 +45,16 @@ const UploadSignature = () => {
   const [clinicSaving, setClinicSaving] = useState(false);
   const [clinicError, setClinicError] = useState("");
   const [clinicSuccess, setClinicSuccess] = useState("");
+  const [selectedSuccessSound, setSelectedSuccessSound] = useState(() => localStorage.getItem("selectedSuccessSound") || "chime");
+  const [selectedErrorSound, setSelectedErrorSound] = useState(() => localStorage.getItem("selectedErrorSound") || "gentle");
+  const [customSuccessSoundUrl, setCustomSuccessSoundUrl] = useState(() => localStorage.getItem("customSuccessSoundUrl") || "");
+  const [customSuccessSoundName, setCustomSuccessSoundName] = useState(() => localStorage.getItem("customSuccessSoundName") || "");
+  const [customErrorSoundUrl, setCustomErrorSoundUrl] = useState(() => localStorage.getItem("customErrorSoundUrl") || "");
+  const [customErrorSoundName, setCustomErrorSoundName] = useState(() => localStorage.getItem("customErrorSoundName") || "");
+  const [playingSound, setPlayingSound] = useState(null);
+  const [soundSuccess, setSoundSuccess] = useState("");
   const fileInputRef = useRef(null);
+  const previewAudioRef = useRef(null);
 
   const fetchCurrentSignature = async () => {
     try {
@@ -124,6 +139,120 @@ if (selected) {
     } finally {
       setClinicLoading(false);
     }
+  };
+
+  const successSounds = [
+    { id: "chime", name: "Success Chime", description: "Pleasant ascending chime" },
+    { id: "notification", name: "Notification", description: "Modern notification sound" },
+    { id: "celebration", name: "Celebration", description: "Joyful celebration sound" },
+    { id: "soft", name: "Soft Melody", description: "Gentle melodic tone" },
+    { id: "crystal", name: "Crystal", description: "Clear crystal-like sound" },
+    { id: "magic", name: "Magic", description: "Magical sparkling sound" },
+    { id: "uplifting", name: "Uplifting", description: "Motivational uplifting tone" },
+  ];
+
+  const errorSounds = [
+    { id: "gentle", name: "Gentle Descend", description: "Soft descending melody" },
+    { id: "soft", name: "Soft Alert", description: "Gentle warning tone" },
+    { id: "subtle", name: "Subtle", description: "Very subtle notification" },
+    { id: "classic", name: "Classic Error", description: "Traditional error sound" },
+    { id: "modern", name: "Modern Alert", description: "Contemporary alert" },
+    { id: "calm", name: "Calm Warning", description: "Calm but noticeable" },
+    { id: "minimal", name: "Minimal", description: "Minimalist tone" },
+  ];
+
+  const persistSuccessSound = (soundId, url, name) => {
+    setSelectedSuccessSound(soundId);
+    localStorage.setItem("selectedSuccessSound", soundId);
+    if (soundId === "custom-success") {
+      if (url) {
+        setCustomSuccessSoundUrl(url);
+        localStorage.setItem("customSuccessSoundUrl", url);
+      }
+      if (name) {
+        setCustomSuccessSoundName(name);
+        localStorage.setItem("customSuccessSoundName", name);
+      }
+    }
+  };
+
+  const persistErrorSound = (soundId, url, name) => {
+    setSelectedErrorSound(soundId);
+    localStorage.setItem("selectedErrorSound", soundId);
+    if (soundId === "custom-error") {
+      if (url) {
+        setCustomErrorSoundUrl(url);
+        localStorage.setItem("customErrorSoundUrl", url);
+      }
+      if (name) {
+        setCustomErrorSoundName(name);
+        localStorage.setItem("customErrorSoundName", name);
+      }
+    }
+  };
+
+  const handleSoundChange = (type, soundId) => {
+    if (type === "success") {
+      persistSuccessSound(soundId);
+    } else {
+      persistErrorSound(soundId);
+    }
+    playSoundPreview(type, soundId);
+  };
+
+  const handleCustomToneUpload = (type, event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("audio/")) {
+      setError("Please select an audio file");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Audio file size must be less than 5MB");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const url = e.target.result;
+      if (type === "success") {
+        persistSuccessSound("custom-success", url, file.name);
+      } else {
+        persistErrorSound("custom-error", url, file.name);
+      }
+      setSoundSuccess("Custom tone uploaded and selected.");
+      setTimeout(() => setSoundSuccess(""), 3000);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const playSoundPreview = (type, soundId) => {
+    if (previewAudioRef.current) {
+      previewAudioRef.current.pause();
+      previewAudioRef.current = null;
+    }
+
+    setPlayingSound(`${type}-${soundId}`);
+
+    if (soundId === "custom-success" || soundId === "custom-error") {
+      const url = soundId === "custom-success" ? customSuccessSoundUrl : customErrorSoundUrl;
+      if (url) {
+        const audio = new Audio(url);
+        previewAudioRef.current = audio;
+        audio.play().catch((err) => console.error("Preview playback failed:", err));
+      }
+    } else {
+      playSound(type, soundId, true);
+    }
+
+    setTimeout(() => {
+      if (previewAudioRef.current) {
+        previewAudioRef.current.pause();
+        previewAudioRef.current = null;
+      }
+      setPlayingSound(null);
+    }, 3000);
   };
 
   const handleSaveClinicSettings = async () => {
@@ -214,7 +343,7 @@ if (selected) {
   return (
     <Box sx={{ width: "100%" }}>
       <Typography variant="h5" gutterBottom>
-        Upload Digital Signature
+        Settings
       </Typography>
 
       <Paper sx={{ p: 3, mb: 3 }}>
@@ -222,41 +351,58 @@ if (selected) {
           Clinic Details
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Set the clinic name, address, and phone number used in generated PDFs. Address and phone are used only in the invoice header.
+          Set the clinic name, address, and phone number to use in generated PDFs. Address and phone are used only in the invoice header.
         </Typography>
 
-        <Grid container spacing={2}>
-          <Grid item xs={12} md={4}>
-            <TextField
-              label="Clinic Name"
-              value={clinicName}
-              onChange={(e) => setClinicName(e.target.value)}
-              fullWidth
-              disabled={clinicLoading}
-            />
-          </Grid>
-          <Grid item xs={12} md={4}>
-            <TextField
-              label="Clinic Address"
-              value={clinicAddress}
-              onChange={(e) => setClinicAddress(e.target.value)}
-              fullWidth
-              multiline
-              rows={2}
-              disabled={clinicLoading}
-            />
-          </Grid>
-          <Grid item xs={12} md={4}>
-            <TextField
-              label="Clinic Phone"
-              value={clinicPhone}
-              onChange={(e) => setClinicPhone(e.target.value)}
-              fullWidth
-              disabled={clinicLoading}
-              placeholder="e.g., 8977419348, 8977449348"
-            />
-          </Grid>
-        </Grid>
+        <Box
+  sx={{
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 2,
+    p: 2,
+    borderRadius: 2,
+    backgroundColor: "#f9fafb",
+    boxShadow: "0 2px 6px rgba(0,0,0,0.05)",
+  }}
+>
+  {/* Clinic Name */}
+  <Box sx={{ flex: "1 1 150px", minWidth: 250 }}>
+    <TextField
+      label="Clinic Name"
+      value={clinicName}
+      onChange={(e) => setClinicName(e.target.value)}
+      fullWidth
+      disabled={clinicLoading}
+      size="small"
+    />
+  </Box>
+
+  {/* Clinic Address */}
+  <Box sx={{ flex: "1 1 300px", minWidth: 250 }}>
+    <TextField
+      label="Clinic Address"
+      value={clinicAddress}
+      onChange={(e) => setClinicAddress(e.target.value)}
+      fullWidth
+      rows={1}
+      disabled={clinicLoading}
+      size="small"
+    />
+  </Box>
+
+  {/* Clinic Phone */}
+  <Box sx={{ flex: "1 1 50px", minWidth: 100 }}>
+    <TextField
+      label="Clinic Phone"
+      value={clinicPhone}
+      onChange={(e) => setClinicPhone(e.target.value)}
+      fullWidth
+      disabled={clinicLoading}
+      placeholder="e.g. 1234567890"
+      size="small"
+    />
+  </Box>
+</Box>
 
         <Box sx={{ mt: 2, display: "flex", flexWrap: "wrap", gap: 2 }}>
           <Button
@@ -288,10 +434,10 @@ if (selected) {
         )}
       </Paper>
 
-      <Grid container spacing={3} sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "auto 1fr" }, gap: 3 }}>
+      <Grid container spacing={1} sx={{ display: "flex", gridTemplateColumns: { xs: "1fr", md: "auto 1fr" }, gap: 1 }}>
         {/* Current Signature */}
         <Box>
-          <Paper sx={{ p: 3, height: "100%" }}>
+          
             <Typography variant="h6" gutterBottom>
               Current Signature
             </Typography>
@@ -303,7 +449,7 @@ if (selected) {
                   component="img"
                   image={currentSignature}
                   alt="Current signature"
-                  sx={{ height: 150, objectFit: "contain" }}
+                  sx={{ height: 155, objectFit: "contain" }}
                   onError={(e) => {
                     console.error("Image failed to load:", currentSignature);
                     console.error("Image error:", e);
@@ -325,99 +471,15 @@ if (selected) {
                 No signature uploaded yet.
               </Typography>
             )}
-          </Paper>
-        </Box>
+          
+       </Box>
 
-        {/* Upload New Signature */}
-        <Box>
-          <Paper sx={{ p: 3, height: "100%" }}>
-            <Typography variant="h6" gutterBottom>
-              Upload New Signature
-            </Typography>
-            <Typography variant="body2" gutterBottom>
-              Upload a digital signature image that will be used in PDF reports.
-              Supported formats: JPG, PNG, GIF. Maximum size: 5MB.
-            </Typography>
-
-            <Box sx={{ mt: 3 }}>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleFileSelect}
-                ref={fileInputRef}
-                style={{ display: "none" }}
-              />
-
-              <Button
-                variant="outlined"
-                startIcon={<CloudUpload />}
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploading}
-              >
-                Choose Image
-              </Button>
-            </Box>
-
-            {preview && (
-              <Card sx={{ mt: 3, maxWidth: 300 }}>
-                <CardContent>
-                  <Typography variant="subtitle1" gutterBottom>
-                    Preview
-                  </Typography>
-                </CardContent>
-                <CardMedia
-                  component="img"
-                  image={preview}
-                  alt="Signature preview"
-                  sx={{ height: 150, objectFit: "contain" }}
-                />
-              </Card>
-            )}
-
-            {selectedFile && (
-              <Box sx={{ mt: 3 }}>
-                <Typography variant="body2" color="text.secondary">
-                  Selected: {selectedFile.name} ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
-                </Typography>
-              </Box>
-            )}
-
-            {error && (
-              <Alert severity="error" sx={{ mt: 2 }}>
-                {error}
-              </Alert>
-            )}
-
-            {success && (
-              <Alert severity="success" sx={{ mt: 2 }}>
-                {success}
-              </Alert>
-            )}
-
-            <Box sx={{ mt: 3, display: "flex", gap: 2 }}>
-              <Button
-                variant="contained"
-                onClick={handleUpload}
-                disabled={!selectedFile || uploading}
-                startIcon={uploading ? <CircularProgress size={20} /> : <Image />}
-              >
-                {uploading ? "Uploading..." : "Upload Signature"}
-              </Button>
-
-              {selectedFile && (
-                <Button variant="outlined" onClick={handleCancel} disabled={uploading}>
-                  Cancel
-                </Button>
-              )}
-            </Box>
-          </Paper>
-        </Box>
-      </Grid>
-
+        
       {/* Previously Uploaded Signatures */}
-      <Box sx={{ mt: 5 }}>
+      <Box sx={{ mt: 0.1 }}>
+        
         <Typography variant="h6" gutterBottom>
-          Previously Uploaded Signatures
+          Previous Signatures
         </Typography>
 
         {loadingSignatures ? (
@@ -485,7 +547,249 @@ if (selected) {
             No previously uploaded signatures found. Upload a new one above.
           </Alert>
         )}
-      </Box>
+        
+        </Box>
+        {/* Upload New Signature */}
+        <Box>
+          <Paper sx={{ p: 1.5, height: "100%" }}>
+            <Typography variant="h6" gutterBottom>
+              Upload New Signature
+            </Typography>
+            <Typography variant="body2" gutterBottom>
+              Upload a digital signature image that will be used in PDF reports.
+              </Typography>
+              <Typography variant="body2" gutterBottom>
+              Supported formats: JPG, PNG, GIF. Maximum size: 5MB.
+            </Typography>
+
+            <Box sx={{ mt: 1 }}>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleFileSelect}
+                ref={fileInputRef}
+                style={{ display: "none" }}
+              />
+
+              <Button
+                variant="outlined"
+                startIcon={<CloudUpload />}
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+              >
+                Choose Image
+              </Button>
+            </Box>
+
+            {preview && (
+              <Card sx={{ mt: 0.1, maxWidth: 150 }}>
+                <CardContent>
+                  <Typography variant="subtitle1" mb={- 2.5} mt={- 1.5} gutterBottom>
+                    Preview
+                  </Typography>
+                </CardContent>
+                <CardMedia
+                  component="img"
+                  image={preview}
+                  alt="Signature preview"
+                  sx={{ height: 100, objectFit: "contain" }}
+                />
+              </Card>
+            )}
+
+            {selectedFile && (
+              <Box sx={{ mt: 1 }}>
+                <Typography variant="body2" color="text.secondary">
+                  Selected: {selectedFile.name} ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
+                </Typography>
+              </Box>
+            )}
+
+            {error && (
+              <Alert severity="error" sx={{ mt: 1 }}>
+                {error}
+              </Alert>
+            )}
+
+            {success && (
+              <Alert severity="success" sx={{ mt: 1 }}>
+                {success}
+              </Alert>
+            )}
+
+            <Box sx={{ mt: 1, display: "flex", gap: 1 }}>
+              <Button
+                variant="contained"
+                onClick={handleUpload}
+                disabled={!selectedFile || uploading}
+                startIcon={uploading ? <CircularProgress size={20} /> : <Image />}
+              >
+                {uploading ? "Uploading..." : "Upload Signature"}
+              </Button>
+
+              {selectedFile && (
+                <Button variant="outlined" onClick={handleCancel} disabled={uploading}>
+                  Cancel
+                </Button>
+              )}
+            </Box>
+          </Paper>
+        </Box>   
+       </Grid>
+
+      {/* Sound Selection */}
+
+        <Paper sx={{ p: 3, mt: 4, background: "rgba(255,255,255,0.92)", boxShadow: "0 14px 40px rgba(15,23,42,0.08)", borderRadius: 3 }}>
+        <Typography variant="h6" gutterBottom>
+          Sound Selection
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Pick the sounds you want for success and error feedback across the app. Preview each tone before saving.
+        </Typography>
+
+        {soundSuccess && (
+          <Alert severity="success" sx={{ mb: 2 }}>
+            {soundSuccess}
+          </Alert>
+        )}
+
+        <Grid container spacing={3}>
+          <Grid item xs={12} md={6}>
+            <Paper sx={{ p: 3, background: "linear-gradient(135deg, rgba(20, 179, 28, 0.43) 0%, rgba(91, 204, 109, 0.42) 100%)", border: "1px solid rgba(76,175,80,0.2)", borderRadius: 3 }}>
+              <Typography variant="subtitle1" fontWeight={700} mb={2} color="success.main">
+                Success Sounds
+              </Typography>
+              <FormControl component="fieldset" sx={{ width: "100%" }}>
+                <FormLabel component="legend" sx={{ mb: 2, color: "text.secondary" }}>
+                  Select a pleasant confirmation tone.
+                </FormLabel>
+                <RadioGroup
+                  value={selectedSuccessSound}
+                  onChange={(e) => handleSoundChange("success", e.target.value)}
+                >
+                  {successSounds.map((sound) => (
+                    <Box key={sound.id} sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
+                      <FormControlLabel
+                        value={sound.id}
+                        control={<Radio color="success" />}
+                        label={
+                          <Box>
+                            <Typography variant="body1" fontWeight={600}>
+                              {sound.name}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              {sound.description}
+                            </Typography>
+                          </Box>
+                        }
+                        sx={{ flex: 1 }}
+                      />
+                    </Box>
+                  ))}
+                  {customSuccessSoundUrl && (
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
+                      <FormControlLabel
+                        value="custom-success"
+                        control={<Radio color="success" />}
+                        label={
+                          <Box>
+                            <Typography variant="body1" fontWeight={600}>
+                              Custom Tone{customSuccessSoundName ? ` — ${customSuccessSoundName}` : ""}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              Uploaded local audio file
+                            </Typography>
+                          </Box>
+                        }
+                        sx={{ flex: 1 }}
+                      />
+                    </Box>
+                  )}
+                </RadioGroup>
+                <Box sx={{ mt: 2, display: "flex", flexWrap: "wrap", gap: 1, alignItems: "center" }}>
+                  <Button variant="outlined" component="label" size="small">
+                    Upload Custom Success Tone
+                    <input
+                      hidden
+                      accept="audio/*"
+                      type="file"
+                      onChange={(e) => handleCustomToneUpload("success", e)}
+                    />
+                  </Button>
+                  
+                </Box>
+              </FormControl>
+            </Paper>
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <Paper sx={{ p: 3, background: "linear-gradient(135deg, rgba(244, 67, 54, 0.38) 0%, rgba(179, 34, 34, 0.31) 100%)", border: "1px solid rgba(244,67,54,0.2)", borderRadius: 3 }}>
+              <Typography variant="subtitle1" fontWeight={700} mb={2} color="error.main">
+                Error Sounds
+              </Typography>
+              <FormControl component="fieldset" sx={{ width: "100%" }}>
+                <FormLabel component="legend" sx={{ mb: 2, color: "text.secondary" }}>
+                  Select a calm alert tone for errors.
+                </FormLabel>
+                <RadioGroup
+                  value={selectedErrorSound}
+                  onChange={(e) => handleSoundChange("error", e.target.value)}
+                >
+                  {errorSounds.map((sound) => (
+                    <Box key={sound.id} sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
+                      <FormControlLabel
+                        value={sound.id}
+                        control={<Radio color="error" />}
+                        label={
+                          <Box>
+                            <Typography variant="body1" fontWeight={600}>
+                              {sound.name}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              {sound.description}
+                            </Typography>
+                          </Box>
+                        }
+                        sx={{ flex: 1 }}
+                      />
+                    </Box>
+                  ))}
+                  {customErrorSoundUrl && (
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
+                      <FormControlLabel
+                        value="custom-error"
+                        control={<Radio color="error" />}
+                        label={
+                          <Box>
+                            <Typography variant="body1" fontWeight={600}>
+                              Custom Tone{customErrorSoundName ? ` — ${customErrorSoundName}` : ""}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              Uploaded local audio file
+                            </Typography>
+                          </Box>
+                        }
+                        sx={{ flex: 1 }}
+                      />
+                    </Box>
+                  )}
+                </RadioGroup>
+                <Box sx={{ mt: 2, display: "flex", flexWrap: "wrap", gap: 1, alignItems: "center" }}>
+                  <Button variant="outlined" component="label" size="small">
+                    Upload Custom Error Tone
+                    <input
+                      hidden
+                      accept="audio/*"
+                      type="file"
+                      onChange={(e) => handleCustomToneUpload("error", e)}
+                    />
+                  </Button>
+                </Box>
+              </FormControl>
+            </Paper>
+          </Grid>
+        </Grid>
+
+      </Paper>
     </Box>
   );
 };

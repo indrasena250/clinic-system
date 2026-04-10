@@ -30,7 +30,6 @@ import {
   History as HistoryIcon,
   Settings as SettingsIcon,
   Draw as SignatureIcon,
-  VolumeUp as SoundIcon,
   Logout as LogoutIcon,
 } from "@mui/icons-material";
 
@@ -196,17 +195,7 @@ const DashboardLayout = () => {
           <ListItemIcon>
             <SignatureIcon />
           </ListItemIcon>
-          <ListItemText primary="Upload Signature" />
-        </ListItemButton>
-
-        <ListItemButton
-          selected={isActive("/settings/sounds")}
-          onClick={() => navigate("/settings/sounds")}
-        >
-          <ListItemIcon>
-            <SoundIcon />
-          </ListItemIcon>
-          <ListItemText primary="Sound Settings" />
+          <ListItemText primary="Settings" />
         </ListItemButton>
 
         <Divider sx={{ my: 1 }} />
@@ -327,12 +316,6 @@ const DashboardLayout = () => {
           <Tooltip title="Settings">
           <IconButton onClick={() => navigate("/settings/signature")} sx={iconStyle(isActive("/settings"))}>
             <SettingsIcon />
-          </IconButton>
-          </Tooltip>
-
-          <Tooltip title="Sound Settings">
-          <IconButton onClick={() => navigate("/settings/sounds")} sx={iconStyle(isActive("/settings/sounds"))}>
-            <SoundIcon />
           </IconButton>
           </Tooltip>
 
