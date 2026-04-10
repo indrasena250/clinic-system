@@ -426,7 +426,7 @@ const Dashboard = () => {
                     ₹{format(summary?.currentMonthNet || 0)}
                   </Typography>
                   <Typography variant="body2" sx={{ opacity: 2, mt: 1 }}>
-                     With expenses {dayjs().format("MMMM")}
+                     Without expenses {dayjs().format("MMMM")}
                   </Typography>
                 </Box>
               </Grid>
