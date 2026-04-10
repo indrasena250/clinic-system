@@ -526,7 +526,7 @@ const handleSendWhatsApp = async (row) => {
           </Typography>
         </Box>
 
-        <Box sx={{ display: "flex", flexWrap: "nowrap" }}>
+        <Box sx={{ display: "flex", flexWrap: "nowrap" , gap: isMd ? 0.2 : 1}}>
           {[
             { key: "today", label: "Today" },
             { key: "yesterday", label: "Yesterday" },
@@ -538,19 +538,29 @@ const handleSendWhatsApp = async (row) => {
               key={item.key}
               onClick={() => setFilterRange(item.key)}
               sx={{
-                borderRadius: "10px",
-                px: isMd ? 0 : 3,
-                py: isMd ? 0.2 : 0.6,
-                fontSize: "0.8rem",
+                borderRadius: "50px",
+
+                px: isMd ? { xs: 1, sm: 1.5, md: 2 } : { xs: 2, sm: 5, md: 3 },   // responsive horizontal padding
+                py: { xs: 0.2, sm: 0.4 },
+
+                fontSize: { xs: "0.8rem", sm: "0.8rem", md: "0.8rem" },
+
+                minWidth: isMd ? "auto" : 100,   // 🔥 VERY IMPORTANT (removes default MUI width)
+                lineHeight: 2,
+
                 textTransform: "none",
                 fontWeight: 600,
-                flexShrink: 0,
+
+                flexShrink: 1,      // allow shrinking
                 whiteSpace: "nowrap",
+
                 background:
                   filterRange === item.key
                     ? "linear-gradient(135deg,#1976d2,#42a5f5)"
-                    : "rgba(0,0,0,0.04)",
-                color: filterRange === item.key ? "#fff" : "#555",
+                    : "rgba(0, 0, 0, 0.1)",
+
+                color: filterRange === item.key ? "#fff" : "#000000",
+
                 transition: "all 0.25s",
                 "&:hover": {
                   transform: "translateY(-2px)",

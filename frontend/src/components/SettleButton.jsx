@@ -118,12 +118,13 @@ const SettleButton = ({ onSettlementComplete }) => {
         startIcon={<AccountBalanceWalletIcon />}
         sx={{
           textTransform: "none",
+          fontSize: "0.9rem",
           fontWeight: 600,
           px: isMobile ? 1.25 : 2.5,
           py: 1.25,
           }}
       >
-        {loading ? "Settling..." : "Settle & Generate Report"}
+        {loading ? "Settling..." : "Settle & Report"}
       </Button>
 
       {/* Confirmation Modal */}
