@@ -2250,25 +2250,28 @@ router.get("/invoice/scans/:invoiceId", protect, authorize("admin", "staff"), as
 ========================================= */
 router.get("/invoice/pdf/:invoiceId", protect, authorize("admin", "staff"), async (req, res) => {
   try {
-    const clinicId = req.user?.clinic_id ?? 1;
     const invoiceId = req.params.invoiceId;
+
+    // First, fetch the patient to get clinic_id
+    const [patientRows] = await db.query(
+      "SELECT * FROM patients WHERE invoice_id = ? ORDER BY upload_date ASC, id ASC",
+      [invoiceId]
+    );
+    if (!patientRows.length) return res.status(404).json({ message: "Patient not found" });
+
+    const patientData = patientRows[0];
+    const clinicId = patientData?.clinic_id ?? 1;
     console.log("Generating invoice PDF for:", invoiceId, "clinic:", clinicId);
 
     const [clinicRows] = await db.query(
       "SELECT name, address, phone FROM clinics WHERE id = ?",
       [clinicId]
     );
-    const clinicName = clinicRows[0]?.name || "SRIDEVI DIAGNOSTIC CENTER";
-    const clinicAddress = clinicRows[0]?.address || "Mahendranath Complex, Bus Stand Back Side, Nagarkurnool";
-    const clinicPhone = clinicRows[0]?.phone || "8977419348, 8977449348";
+    const clinicName = clinicRows[0]?.name || "";
+    const clinicAddress = clinicRows[0]?.address || "";
+    const clinicPhone = clinicRows[0]?.phone || "";
 
-    const [rows] = await db.query(
-      "SELECT * FROM patients WHERE invoice_id = ? AND clinic_id = ? ORDER BY upload_date ASC, id ASC",
-      [invoiceId, clinicId]
-    );
-    if (!rows.length) return res.status(404).json({ message: "Patient not found" });
-
-    const patientData = rows[0];
+    const rows = patientRows;
 
     const PDFDocument = require("pdfkit");
     const dayjs = require("dayjs");
@@ -2445,11 +2448,13 @@ router.get("/invoice/public/:invoiceId", async (req, res) => {
     const clinicId = patientData?.clinic_id ?? 1;
 
     const [clinicRows] = await db.query(
-      "SELECT name, address FROM clinics WHERE id = ?",
+      "SELECT name, address, phone FROM clinics WHERE id = ?",
       [clinicId]
     );
-    const clinicName = clinicRows[0]?.name || "SRIDEVI DIAGNOSTIC CENTER";
-    const clinicAddress = clinicRows[0]?.address || "Mahendranath Complex, Bus Stand Back Side, Nagarkurnool";
+
+    const clinicName = clinicRows[0]?.name || "";
+    const clinicAddress = clinicRows[0]?.address || "";
+    const clinicPhone = clinicRows[0]?.phone || "";
 
     const PDFDocument = require("pdfkit");
     const dayjs = require("dayjs");
@@ -2490,7 +2495,7 @@ router.get("/invoice/public/:invoiceId", async (req, res) => {
 
     doc.font("Helvetica").fontSize(11);
     doc.text(clinicAddress, margin, 75);
-    doc.text("Phone: 8977419348, 8977449348", margin, 90);
+    doc.text(`Phone: ${clinicPhone}`, margin, 90);
 
     doc.font("Helvetica-Bold").fontSize(13);
     doc.text("INVOICE", rightX - 100, 50, { width: 100, align: "right" });
