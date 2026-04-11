@@ -72,42 +72,45 @@ async function drawSignature(doc, pageWidth, margin, clinicId) {
       });
     });
 
-    // Fit any signature format/size into a consistent box while preserving aspect ratio.
-    // Also ensure the label is centered exactly under the drawn image width.
-    const maxSigWidth = 180;
+    // Fit any signature into a consistent bounding box while preserving aspect ratio.
+    const maxSigWidth = Math.min(220, pageWidth - margin - 20);
     const maxSigHeight = 90;
 
     const img = doc.openImage(signatureBuffer);
     const naturalW = img.width || maxSigWidth;
     const naturalH = img.height || maxSigHeight;
+    if (!naturalW || !naturalH) return;
 
-    // Allow upscaling small signatures so they "fit" the box too.
     const scale = Math.min(maxSigWidth / naturalW, maxSigHeight / naturalH);
     const drawW = Math.max(1, Math.round(naturalW * scale));
     const drawH = Math.max(1, Math.round(naturalH * scale));
 
-    // Keep a consistent signature box aligned to the right, then center the image inside it.
-    const boxX = pageWidth - maxSigWidth - 10;
-    const boxY = doc.y - 8;
+    const neededHeight = drawH + 30;
+    if (doc.y + neededHeight > doc.page.height - margin) {
+      doc.addPage();
+    }
 
-    const sigX = boxX + Math.round((maxSigWidth - drawW) / 2);
-    const sigY = boxY + Math.round((maxSigHeight - drawH) / 2);
+    const sigX = pageWidth - maxSigWidth - 10;
+    const sigY = doc.y;
 
-    doc.image(img, sigX, sigY, { width: drawW, height: drawH });
+    doc.image(img, sigX + Math.round((maxSigWidth - drawW) / 2), sigY, {
+      width: drawW,
+      height: drawH,
+    });
 
     doc.font("Helvetica-Bold")
       .fontSize(10)
       .text(
         "Authorized Signature",
-        boxX,
-        boxY + maxSigHeight -10,
+        sigX,
+        sigY + drawH + 8,
         {
           width: maxSigWidth,
           align: "center"
         }
       );
 
-    doc.moveDown(1);
+    doc.y = sigY + drawH + 24;
   } catch (error) {
     console.error("Error drawing signature:", error);
   }
