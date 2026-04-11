@@ -72,16 +72,16 @@ async function drawSignature(doc, pageWidth, margin, clinicId) {
       });
     });
 
-    // Fit any signature into a consistent bounding box while preserving aspect ratio.
-    const maxSigWidth = Math.min(220, pageWidth - margin - 20);
-    const maxSigHeight = 90;
+    // Fit any signature into a smaller bounding box while preserving aspect ratio.
+    const maxSigWidth = Math.min(150, pageWidth - margin - 20);
+    const maxSigHeight = 70;
 
     const img = doc.openImage(signatureBuffer);
     const naturalW = img.width || maxSigWidth;
     const naturalH = img.height || maxSigHeight;
     if (!naturalW || !naturalH) return;
 
-    const scale = Math.min(maxSigWidth / naturalW, maxSigHeight / naturalH);
+    const scale = Math.min(maxSigWidth / naturalW, maxSigHeight / naturalH) * 0.9;
     const drawW = Math.max(1, Math.round(naturalW * scale));
     const drawH = Math.max(1, Math.round(naturalH * scale));
 
