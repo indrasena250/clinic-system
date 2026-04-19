@@ -113,6 +113,13 @@ exports.createDemoSession = async (req, res) => {
 
             await connection.commit();
 
+            // Get the actual stored timestamps from database
+            const [sessionRows] = await connection.query(
+                'SELECT expires_at FROM demo_sessions WHERE session_id = ?',
+                [sessionId]
+            );
+            const storedExpiresAt = sessionRows[0].expires_at;
+
             // Create a demo user object
             const demoUser = {
                 id: `demo_${sessionId}`,
@@ -131,7 +138,7 @@ exports.createDemoSession = async (req, res) => {
             res.json({
                 token,
                 user: demoUser,
-                expires_at: expiresAt,
+                expires_at: storedExpiresAt,
                 message: `Demo session created. You have ${DEMO_DURATION_HOURS} hours to explore.`
             });
         } catch (transactionError) {
@@ -270,9 +277,7 @@ exports.getDemoInfo = async (req, res) => {
         }
 
         const [rows] = await db.query(
-            `SELECT session_id, created_at, expires_at, is_active,
-                    CONVERT_TZ(created_at, @@session.time_zone, '+05:30') as created_at_ist,
-                    CONVERT_TZ(expires_at, @@session.time_zone, '+05:30') as expires_at_ist
+            `SELECT session_id, created_at, expires_at, is_active
              FROM demo_sessions WHERE session_id = ?`,
             [sessionId]
         );
@@ -285,13 +290,13 @@ exports.getDemoInfo = async (req, res) => {
 
         const session = rows[0];
         const now = new Date();
-        const expiresAt = new Date(session.expires_at_ist);
+        const expiresAt = new Date(session.expires_at);
         const timeLeft = Math.max(0, expiresAt - now);
 
         const responseData = {
             session_id: session.session_id,
-            created_at: session.created_at_ist,
-            expires_at: session.expires_at_ist,
+            created_at: session.created_at,
+            expires_at: session.expires_at,
             time_left_hours: Math.floor(timeLeft / (1000 * 60 * 60)),
             time_left_minutes: Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60)),
             is_active: session.is_active

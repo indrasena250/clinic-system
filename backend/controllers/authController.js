@@ -236,6 +236,13 @@ exports.demoEmailLogin = async (req, res) => {
 
             await connection.commit();
 
+            // Get the actual stored timestamps from database
+            const [sessionRows] = await connection.query(
+                'SELECT expires_at FROM demo_sessions WHERE session_id = ?',
+                [sessionId]
+            );
+            const storedExpiresAt = sessionRows[0].expires_at;
+
             // Create a demo user object
             const demoUser = {
                 id: `demo_${sessionId}`,
@@ -254,7 +261,7 @@ exports.demoEmailLogin = async (req, res) => {
             res.json({
                 token,
                 user: demoUser,
-                expires_at: expiresAt,
+                expires_at: storedExpiresAt,
                 message: `Welcome! You have ${DEMO_DURATION_HOURS} hours of free access to explore the system.`
             });
         } catch (transactionError) {
