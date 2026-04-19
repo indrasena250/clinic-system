@@ -25,7 +25,7 @@ exports.trackDemoDataMiddleware = (tableName) => {
                     }
 
                     if (recordId) {
-                        trackDemoData(tableName, recordId, req.user.session_id, req.user.email || null);
+                        trackDemoData(tableName, recordId, req.user.session_id);
                     }
                 } catch (error) {
                     // Ignore parsing errors

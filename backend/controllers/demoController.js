@@ -55,7 +55,6 @@ exports.createDemoSession = async (req, res) => {
                 id: `demo_${session.session_id}`,
                 full_name: 'Demo User',
                 username: 'demo_user',
-                email: session.email || null,
                 role: 'admin',
                 clinic_id: session.clinic_id,
                 clinic_name: clinic.name,
@@ -83,10 +82,10 @@ exports.createDemoSession = async (req, res) => {
         await connection.beginTransaction();
 
         try {
-            // Insert demo session with both created_at and expires_at explicitly converted to IST from UTC
+            // Insert demo session with both created_at and expires_at explicitly converted to IST
             await connection.query(
                 `INSERT INTO demo_sessions (session_id, email, ip_address, user_agent, created_at, expires_at)
-                 VALUES (?, ?, ?, ?, CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', '+05:30'), CONVERT_TZ(DATE_ADD(UTC_TIMESTAMP(), INTERVAL ? HOUR), '+00:00', '+05:30'))`,
+                 VALUES (?, ?, ?, ?, CONVERT_TZ(NOW(), '+00:00', '+05:30'), CONVERT_TZ(DATE_ADD(NOW(), INTERVAL ? HOUR), '+00:00', '+05:30'))`,
                 [sessionId, email, ipAddress, userAgent, DEMO_DURATION_HOURS]
             );
 
@@ -94,7 +93,7 @@ exports.createDemoSession = async (req, res) => {
             const demoClinicName = `Demo Clinic - ${sessionId.substring(0, 8)}`;
             const [clinicResult] = await connection.query(
                 `INSERT INTO clinics (name, address, phone, created_at)
-                 VALUES (?, ?, ?, CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', '+05:30'))`,
+                 VALUES (?, ?, ?, CONVERT_TZ(NOW(), '+00:00', '+05:30'))`,
                 [demoClinicName, 'Demo Address', 'Demo Phone']
             );
             const demoClinicId = clinicResult.insertId;
@@ -107,9 +106,9 @@ exports.createDemoSession = async (req, res) => {
 
             // Track the demo clinic creation
             await connection.query(
-                `INSERT INTO demo_data_tracking (session_id, email, table_name, record_id, created_at)
-                 VALUES (?, ?, ?, ?, CONVERT_TZ(UTC_TIMESTAMP(), '+00:00', '+05:30'))`,
-                [sessionId, email, 'clinics', demoClinicId]
+                `INSERT INTO demo_data_tracking (session_id, table_name, record_id, email, created_at)
+                 VALUES (?, ?, ?, ?, CONVERT_TZ(NOW(), '+00:00', '+05:30'))`,
+                [sessionId, 'clinics', demoClinicId, email]
             );
 
             await connection.commit();
@@ -119,7 +118,6 @@ exports.createDemoSession = async (req, res) => {
                 id: `demo_${sessionId}`,
                 full_name: 'Demo User',
                 username: 'demo_user',
-                email,
                 role: 'admin', // Give full access for demo
                 clinic_id: demoClinicId,
                 clinic_name: demoClinicName,
@@ -201,12 +199,12 @@ exports.validateDemoSession = async (req, res, next) => {
 };
 
 // Track data created during demo
-exports.trackDemoData = async (tableName, recordId, sessionId, email = null) => {
+exports.trackDemoData = async (tableName, recordId, sessionId) => {
     try {
         await db.query(
-            `INSERT INTO demo_data_tracking (session_id, email, table_name, record_id, created_at)
-             VALUES (?, ?, ?, ?, CONVERT_TZ(NOW(), '+00:00', '+05:30'))`,
-            [sessionId, email, tableName, recordId]
+            `INSERT INTO demo_data_tracking (session_id, table_name, record_id)
+             VALUES (?, ?, ?)`,
+            [sessionId, tableName, recordId]
         );
     } catch (error) {
         // Silent error handling

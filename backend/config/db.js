@@ -262,9 +262,9 @@ const addClinicIdIfMissing = async (conn, table, hasFk = true) => {
       CREATE TABLE demo_data_tracking (
         id INT AUTO_INCREMENT PRIMARY KEY,
         session_id VARCHAR(255) NOT NULL,
-        email VARCHAR(255) NULL,
         table_name VARCHAR(255) NOT NULL,
         record_id INT NOT NULL,
+        email VARCHAR(255) NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (session_id) REFERENCES demo_sessions(session_id) ON DELETE CASCADE,
         INDEX idx_session_id (session_id)
@@ -277,9 +277,14 @@ const addClinicIdIfMissing = async (conn, table, hasFk = true) => {
        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'demo_data_tracking'`
     );
     const demoDataColumnNames = (demoDataColumns || []).map((c) => c.COLUMN_NAME);
+
     if (!demoDataColumnNames.includes('email')) {
-      await conn.query(`ALTER TABLE demo_data_tracking ADD COLUMN email VARCHAR(255) NULL AFTER session_id`);
+      await conn.query(`ALTER TABLE demo_data_tracking ADD COLUMN email VARCHAR(255) NULL AFTER record_id`);
       console.log('✓ Added email to demo_data_tracking table');
+    }
+    if (!demoDataColumnNames.includes('created_at')) {
+      await conn.query(`ALTER TABLE demo_data_tracking ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP`);
+      console.log('✓ Added created_at to demo_data_tracking table');
     }
   }
  } catch (err) {

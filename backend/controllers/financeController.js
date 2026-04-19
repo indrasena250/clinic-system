@@ -22,7 +22,7 @@ exports.addExpense = async (req, res) => {
 
     // Track demo data if this is a demo user
     if (req.user && req.user.is_demo) {
-      trackDemoData("daily_expenses", result.insertId, req.user.session_id, req.user.email || null);
+      trackDemoData("daily_expenses", result.insertId, req.user.session_id);
     }
 
     res.json({
