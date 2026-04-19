@@ -210,7 +210,7 @@ for (const scan of scans) {
 
   // Track demo data if this is a demo user
   if (req.user && req.user.is_demo) {
-    trackDemoData("patients", result.insertId, req.user.session_id);
+    trackDemoData("patients", result.insertId, req.user.session_id, req.user.email || null);
   }
 }
       await connection.commit();

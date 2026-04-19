@@ -262,6 +262,7 @@ const addClinicIdIfMissing = async (conn, table, hasFk = true) => {
       CREATE TABLE demo_data_tracking (
         id INT AUTO_INCREMENT PRIMARY KEY,
         session_id VARCHAR(255) NOT NULL,
+        email VARCHAR(255) NULL,
         table_name VARCHAR(255) NOT NULL,
         record_id INT NOT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -270,6 +271,16 @@ const addClinicIdIfMissing = async (conn, table, hasFk = true) => {
       )
     `);
     console.log("✓ Created demo_data_tracking table");
+  } else {
+    const [demoDataColumns] = await conn.query(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'demo_data_tracking'`
+    );
+    const demoDataColumnNames = (demoDataColumns || []).map((c) => c.COLUMN_NAME);
+    if (!demoDataColumnNames.includes('email')) {
+      await conn.query(`ALTER TABLE demo_data_tracking ADD COLUMN email VARCHAR(255) NULL AFTER session_id`);
+      console.log('✓ Added email to demo_data_tracking table');
+    }
   }
  } catch (err) {
   console.warn("Demo tables initialization:", err.message);
