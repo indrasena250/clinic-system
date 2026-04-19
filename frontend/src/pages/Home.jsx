@@ -31,6 +31,17 @@ const Home = () => {
           🚀 Try Live Demo
         </Link>
       </section>
+      <section style={styles.sectionAlt}>
+        <h2 style={styles.heading}>Clinic Management System Project</h2>
+
+        <p style={styles.text}>
+            This Clinic Management System project is a full-stack web application designed to manage patient records, diagnostic reports, billing, and doctor referrals efficiently. It is built using modern web technologies to streamline healthcare operations and improve data management in clinics and diagnostic centers.
+        </p>
+
+        <p style={styles.text}>
+            The system includes features such as patient registration, CT scan reports, ultrasound reports, doctor referral tracking, settlement management, and financial reporting. This project demonstrates real-world implementation of a hospital or clinic management system.
+        </p>
+        </section>
 
       {/* 🔷 FEATURES */}
       <section id="features" style={styles.section}>
