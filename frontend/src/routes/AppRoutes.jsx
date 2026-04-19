@@ -1,3 +1,4 @@
+import Home from "../pages/Home";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
@@ -34,16 +35,17 @@ const AppRoutes = () => {
 
   return (
     <Routes>
-
+      {/* Landing Page */}
+      <Route path="/" element={!user ? <Home /> : <Navigate to="/dashboard" />} />
       {/* Login */}
       <Route
         path="/login"
-        element={!user ? <Login /> : <Navigate to="/" />}
+        element={!user ? <Login /> : <Navigate to="/dashboard" />}
       />
 
       {/* Protected Routes */}
       {user && (
-        <Route path="/" element={<DashboardLayout />}>
+        <Route path="/dashboard" element={<DashboardLayout />}>
 
           {/* Dashboard */}
           <Route index element={<Dashboard />} />
@@ -75,7 +77,7 @@ const AppRoutes = () => {
       {/* Redirect Unknown Routes */}
       <Route
         path="*"
-        element={<Navigate to={user ? "/" : "/login"} />}
+        element={<Navigate to={user ? "/dashboard" : "/login"} />}
       />
 
     </Routes>
