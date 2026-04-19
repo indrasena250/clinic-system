@@ -1,4 +1,5 @@
 import Home from "../pages/Home";
+import Project from "../pages/Project";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
@@ -37,6 +38,7 @@ const AppRoutes = () => {
     <Routes>
       {/* Landing Page */}
       <Route path="/" element={!user ? <Home /> : <Navigate to="/dashboard" />} />
+      <Route path="/project" element={<Project />} />
       {/* Login */}
       <Route
         path="/login"

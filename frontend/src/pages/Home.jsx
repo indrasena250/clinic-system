@@ -30,6 +30,9 @@ const Home = () => {
         <Link to="/login" style={styles.primaryBtn}>
           🚀 Try Live Demo
         </Link>
+        <Link to="/project" style={styles.primaryBtn}>
+        📘 View Project Details
+        </Link>
       </section>
       <section style={styles.sectionAlt}>
         <h2 style={styles.heading}>Clinic Management System Project</h2>
