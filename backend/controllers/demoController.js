@@ -77,21 +77,23 @@ exports.createDemoSession = async (req, res) => {
         const expiresAt = new Date(Date.now() + DEMO_DURATION_HOURS * 60 * 60 * 1000);
 
         const connection = await db.getConnection();
+        // Ensure timezone is set to IST before any queries
+        await db.ensureTimezone(connection);
         await connection.beginTransaction();
 
         try {
-            // Insert demo session first so tracking can safely reference it
+            // Insert demo session with both created_at and expires_at explicitly converted to IST
             await connection.query(
-                `INSERT INTO demo_sessions (session_id, email, ip_address, user_agent, expires_at)
-                 VALUES (?, ?, ?, ?, ?)`,
-                [sessionId, email, ipAddress, userAgent, expiresAt]
+                `INSERT INTO demo_sessions (session_id, email, ip_address, user_agent, created_at, expires_at)
+                 VALUES (?, ?, ?, ?, CONVERT_TZ(NOW(), '+00:00', '+05:30'), CONVERT_TZ(DATE_ADD(NOW(), INTERVAL ? HOUR), '+00:00', '+05:30'))`,
+                [sessionId, email, ipAddress, userAgent, DEMO_DURATION_HOURS]
             );
 
             // Create a demo clinic for this session
             const demoClinicName = `Demo Clinic - ${sessionId.substring(0, 8)}`;
             const [clinicResult] = await connection.query(
                 `INSERT INTO clinics (name, address, phone, created_at)
-                 VALUES (?, ?, ?, NOW())`,
+                 VALUES (?, ?, ?, CONVERT_TZ(NOW(), '+00:00', '+05:30'))`,
                 [demoClinicName, 'Demo Address', 'Demo Phone']
             );
             const demoClinicId = clinicResult.insertId;

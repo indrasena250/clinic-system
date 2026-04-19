@@ -18,6 +18,24 @@ const pool = mysql.createPool({
   keepAliveInitialDelay: 0,
 });
 
+// Ensure every new connection uses IST so DB timestamps match application time
+pool.on('connection', (connection) => {
+  connection.query('SET time_zone = "+05:30"', (err) => {
+    if (err) {
+      console.warn('Failed to set DB session time zone:', err.message);
+    }
+  });
+});
+
+// Helper to set timezone on a connection before running queries
+const ensureTimezone = async (conn) => {
+  try {
+    await conn.query('SET time_zone = "+05:30"');
+  } catch (err) {
+    console.warn('Failed to set connection timezone:', err.message);
+  }
+};
+
 /* =========================================
    MULTI-CLINIC: Create clinics table & add clinic_id
 ========================================= */
@@ -260,4 +278,10 @@ const addClinicIdIfMissing = async (conn, table, hasFk = true) => {
  }
 })();
 
-module.exports = pool;
+const db = {
+  getConnection: () => pool.getConnection(),
+  query: (sql, values) => pool.query(sql, values),
+  ensureTimezone
+};
+
+module.exports = db;
