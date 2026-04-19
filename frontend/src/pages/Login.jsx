@@ -45,7 +45,7 @@ const Login = () => {
     try {
       const res = await API.post("/auth/login", form);
       login(res.data);
-      navigate("/");
+      navigate("/dashboard");
     } catch (err) {
       console.log("Login error:", err.response?.data);
       setError(err.response?.data?.message || "Login failed");

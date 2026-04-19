@@ -7,6 +7,8 @@ const generateToken = (user) => {
       role: user.role,
       username: user.username,
       clinic_id: user.clinic_id ?? 1,
+      is_demo: user.is_demo || false,
+      session_id: user.session_id || null,
     },
     process.env.JWT_SECRET,
     { expiresIn: "1d" }

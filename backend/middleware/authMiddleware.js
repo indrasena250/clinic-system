@@ -18,6 +18,14 @@ exports.protect = (req, res, next) => {
 
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+        // Check if this is a demo user
+        if (decoded.is_demo) {
+            // For demo users, we'll validate the session in the demo middleware
+            req.user = decoded;
+            return next();
+        }
+
         req.user = decoded;
         next();
     } catch (error) {

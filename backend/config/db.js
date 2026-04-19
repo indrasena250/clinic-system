@@ -184,4 +184,80 @@ const addClinicIdIfMissing = async (conn, table, hasFk = true) => {
  // }
 //})();
 
+// Ensure demo_sessions and demo_data_tracking tables exist
+(async () => {
+ let conn;
+ try {
+  conn = await pool.getConnection();
+  
+  // Create demo_sessions table
+  const [demoSessionsTable] = await conn.query(
+    "SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'demo_sessions' LIMIT 1"
+  );
+  
+  if (!demoSessionsTable.length) {
+    await conn.query(`
+      CREATE TABLE demo_sessions (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        session_id VARCHAR(255) UNIQUE NOT NULL,
+        email VARCHAR(255) NOT NULL,
+        ip_address VARCHAR(45),
+        user_agent TEXT,
+        clinic_id INT,
+        is_active BOOLEAN DEFAULT TRUE,
+        data_deleted BOOLEAN DEFAULT FALSE,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        expires_at DATETIME NOT NULL,
+        FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE CASCADE,
+        INDEX idx_email (email),
+        INDEX idx_expires_at (expires_at)
+      )
+    `);
+    console.log("✓ Created demo_sessions table");
+  } else {
+    // Ensure demo_sessions has clinic_id and data_deleted columns for legacy schemas
+    const [demoSessionColumns] = await conn.query(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'demo_sessions'`
+    );
+    const demoSessionColumnNames = (demoSessionColumns || []).map((c) => c.COLUMN_NAME);
+
+    if (!demoSessionColumnNames.includes('clinic_id')) {
+      await conn.query(`ALTER TABLE demo_sessions ADD COLUMN clinic_id INT NULL`);
+      await conn.query(`ALTER TABLE demo_sessions ADD CONSTRAINT fk_demo_sessions_clinic_id FOREIGN KEY (clinic_id) REFERENCES clinics(id) ON DELETE CASCADE`);
+      console.log('✓ Added clinic_id to demo_sessions table');
+    }
+
+    if (!demoSessionColumnNames.includes('data_deleted')) {
+      await conn.query(`ALTER TABLE demo_sessions ADD COLUMN data_deleted BOOLEAN DEFAULT FALSE`);
+      console.log('✓ Added data_deleted to demo_sessions table');
+    }
+  }
+  
+  // Create demo_data_tracking table
+  const [demoDataTable] = await conn.query(
+    "SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'demo_data_tracking' LIMIT 1"
+  );
+  
+  if (!demoDataTable.length) {
+    await conn.query(`
+      CREATE TABLE demo_data_tracking (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        session_id VARCHAR(255) NOT NULL,
+        table_name VARCHAR(255) NOT NULL,
+        record_id INT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (session_id) REFERENCES demo_sessions(session_id) ON DELETE CASCADE,
+        INDEX idx_session_id (session_id)
+      )
+    `);
+    console.log("✓ Created demo_data_tracking table");
+  }
+ } catch (err) {
+  console.warn("Demo tables initialization:", err.message);
+ } finally {
+  if (conn) conn.release();
+ }
+})();
+
 module.exports = pool;

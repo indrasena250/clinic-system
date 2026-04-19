@@ -10,12 +10,13 @@ const Project = () => {
         This Clinic Management System is a full-stack web application designed to manage patient records, diagnostic reports, billing, and doctor referrals.
       </p>
 
-      <h2>Features</h2>
+      <h2>Demo Features</h2>
       <ul>
-        <li>Patient Registration</li>
-        <li>CT & Ultrasound Reports</li>
-        <li>Doctor Referral Management</li>
-        <li>Billing & Financial Tracking</li>
+        <li>🚀 <strong>Try Live Demo:</strong> Experience the full system without registration</li>
+        <li>⏰ <strong>8-Hour Trial:</strong> Complete access to all features for 8 hours</li>
+        <li>🗑️ <strong>Auto Cleanup:</strong> All demo data is automatically deleted after trial expires</li>
+        <li>👥 <strong>Individual Sessions:</strong> Each demo user gets their own isolated data</li>
+        <li>📊 <strong>Real-time Tracking:</strong> Demo status and time remaining displayed</li>
       </ul>
 
       <h2>Technologies Used</h2>

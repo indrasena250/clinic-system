@@ -1,4 +1,5 @@
 const db = require("../config/db");
+const { trackDemoData } = require("./demoController");
 const dayjs = require("dayjs");
 const utc = require("dayjs/plugin/utc");
 const timezone = require("dayjs/plugin/timezone");
@@ -14,12 +15,20 @@ exports.addIncome = async (req, res) => {
     // Use IST timezone for created_at to match settlement timestamps
     const istNow = dayjs().tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss");
 
-    await db.query(
+    const [result] = await db.query(
       `INSERT INTO extra_income (clinic_id, income_date, income_type, description, amount, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
       [clinicId, income_date, income_type, description, amount, istNow]
     );
 
-    res.json({ message: "Income added successfully" });
+    // Track demo data if this is a demo user
+    if (req.user && req.user.is_demo) {
+      trackDemoData("extra_income", result.insertId, req.user.session_id);
+    }
+
+    res.json({
+      message: "Income added successfully",
+      id: result.insertId
+    });
 
   } catch (error) {
 

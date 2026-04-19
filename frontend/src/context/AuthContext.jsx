@@ -19,10 +19,15 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(storedUser);
 
   const login = (data) => {
-    localStorage.setItem("token", data.token);
-    localStorage.setItem("user", JSON.stringify(data.user));
+    const savedUser = {
+      ...data.user,
+      expires_at: data.expires_at || data.user?.expires_at || null,
+    };
 
-    setUser(data.user);
+    localStorage.setItem("token", data.token);
+    localStorage.setItem("user", JSON.stringify(savedUser));
+
+    setUser(savedUser);
   };
 
   const logout = () => {

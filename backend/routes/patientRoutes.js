@@ -1,5 +1,7 @@
 const { authorize } = require("../middleware/roleMiddleware");
 const { protect } = require("../middleware/authMiddleware");
+const { validateDemoSession, trackDemoData } = require("../controllers/demoController");
+const { trackDemoDataMiddleware } = require("../middleware/demoMiddleware");
 const express = require("express");
 const router = express.Router();
 const db = require("../config/db");
@@ -119,7 +121,7 @@ async function drawSignature(doc, pageWidth, margin, clinicId) {
 /* =========================================
    ADD NEW PATIENT WITH MULTIPLE SCANS
 ========================================= */
-router.post("/add", protect, authorize("admin", "staff"), async (req, res) => {
+router.post("/add", protect, authorize("admin", "staff"), validateDemoSession, trackDemoDataMiddleware("patients"), async (req, res) => {
   try {
     const clinicId = req.user?.clinic_id ?? 1;
     const {
@@ -205,6 +207,11 @@ for (const scan of scans) {
   );
 
   patientIds.push(result.insertId);
+
+  // Track demo data if this is a demo user
+  if (req.user && req.user.is_demo) {
+    trackDemoData("patients", result.insertId, req.user.session_id);
+  }
 }
       await connection.commit();
 

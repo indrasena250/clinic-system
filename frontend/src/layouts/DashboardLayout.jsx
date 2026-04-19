@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useEffect } from "react";
+import DemoStatus from "../components/DemoStatus";
 import {
   Box,
   Drawer,
@@ -74,8 +75,8 @@ const DashboardLayout = () => {
 
         {/* Dashboard */}
         <ListItemButton
-          selected={location.pathname === "/"}
-          onClick={() => navigate("/")}
+          selected={location.pathname === "/dashboard"}
+          onClick={() => navigate("/dashboard")}
         >
           <ListItemIcon>
             <DashboardIcon />
@@ -87,8 +88,8 @@ const DashboardLayout = () => {
 
         {/* Patients */}
         <ListItemButton
-          selected={isActive("/patients/add")}
-          onClick={() => navigate("/patients/add")}
+          selected={isActive("/dashboard/patients/add")}
+          onClick={() => navigate("/dashboard/patients/add")}
         >
           <ListItemIcon>
             <PeopleIcon />
@@ -97,8 +98,8 @@ const DashboardLayout = () => {
         </ListItemButton>
 
         <ListItemButton
-          selected={isActive("/patients/ultrasound")}
-          onClick={() => navigate("/patients/ultrasound")}
+          selected={isActive("/dashboard/patients/ultrasound")}
+          onClick={() => navigate("/dashboard/patients/ultrasound")}
         >
           <ListItemIcon>
             <ScanIcon />
@@ -107,8 +108,8 @@ const DashboardLayout = () => {
         </ListItemButton>
 
         <ListItemButton
-          selected={isActive("/patients/ct")}
-          onClick={() => navigate("/patients/ct")}
+          selected={isActive("/dashboard/patients/ct")}
+          onClick={() => navigate("/dashboard/patients/ct")}
         >
           <ListItemIcon>
             <ScanIcon />
@@ -120,8 +121,8 @@ const DashboardLayout = () => {
 
         {/* Referrals */}
         <ListItemButton
-          selected={isActive("/referrals")}
-          onClick={() => navigate("/referrals")}
+          selected={isActive("/dashboard/referrals")}
+          onClick={() => navigate("/dashboard/referrals")}
         >
           <ListItemIcon>
             <SettlementIcon />
@@ -130,8 +131,8 @@ const DashboardLayout = () => {
         </ListItemButton>
 
         <ListItemButton
-          selected={isActive("/doctor-settlement")}
-          onClick={() => navigate("/doctor-settlement")}
+          selected={isActive("/dashboard/doctor-settlement")}
+          onClick={() => navigate("/dashboard/doctor-settlement")}
         >
           <ListItemIcon>
             <PaymentIcon />
@@ -140,8 +141,8 @@ const DashboardLayout = () => {
         </ListItemButton>
 
         <ListItemButton
-          selected={isActive("/settlement-history")}
-          onClick={() => navigate("/settlement-history")}
+          selected={isActive("/dashboard/settlement-history")}
+          onClick={() => navigate("/dashboard/settlement-history")}
         >
           <ListItemIcon>
             <ReportIcon />
@@ -153,8 +154,8 @@ const DashboardLayout = () => {
 
         {/* Finance */}
         <ListItemButton
-          selected={isActive("/finance/expenses")}
-          onClick={() => navigate("/finance/expenses")}
+          selected={isActive("/dashboard/finance/expenses")}
+          onClick={() => navigate("/dashboard/finance/expenses")}
         >
           <ListItemIcon>
             <ExpenseIcon />
@@ -163,8 +164,8 @@ const DashboardLayout = () => {
         </ListItemButton>
 
         <ListItemButton
-          selected={isActive("/finance/income")}
-          onClick={() => navigate("/finance/income")}
+          selected={isActive("/dashboard/finance/income")}
+          onClick={() => navigate("/dashboard/finance/income")}
         >
           <ListItemIcon>
             <IncomeIcon />
@@ -176,8 +177,8 @@ const DashboardLayout = () => {
 
         {/* Reports */}
         <ListItemButton
-          selected={isActive("/reports/daily")}
-          onClick={() => navigate("/reports/daily")}
+          selected={isActive("/dashboard/reports/daily")}
+          onClick={() => navigate("/dashboard/reports/daily")}
         >
           <ListItemIcon>
             <ReportIcon />
@@ -189,8 +190,8 @@ const DashboardLayout = () => {
 
         {/* Settings */}
         <ListItemButton
-          selected={isActive("/settings/signature")}
-          onClick={() => navigate("/settings/signature")}
+          selected={isActive("/dashboard/settings/signature")}
+          onClick={() => navigate("/dashboard/settings/signature")}
         >
           <ListItemIcon>
             <SignatureIcon />
@@ -254,67 +255,67 @@ const DashboardLayout = () => {
           <Box sx={{ display: { xs: 'none', sm: 'flex' }, gap: 1 }}>
 
           <Tooltip title="Dashboard">
-          <IconButton onClick={() => navigate("/")} sx={iconStyle(location.pathname === "/")}>
+          <IconButton onClick={() => navigate("/dashboard")} sx={iconStyle(location.pathname === "/dashboard") }>
             <DashboardIcon />
           </IconButton>
           </Tooltip>
 
           <Tooltip title="Add Patient">
-          <IconButton onClick={() => navigate("/patients/add")} sx={iconStyle(isActive("/patients/add"))}>
+          <IconButton onClick={() => navigate("/dashboard/patients/add")} sx={iconStyle(isActive("/dashboard/patients/add"))}>
             <PeopleIcon />
           </IconButton>
           </Tooltip>
 
           <Tooltip title="Ultrasound">
-          <IconButton onClick={() => navigate("/patients/ultrasound")} sx={iconStyle(isActive("/patients/ultrasound"))}>
+          <IconButton onClick={() => navigate("/dashboard/patients/ultrasound")} sx={iconStyle(isActive("/dashboard/patients/ultrasound"))}>
             <UltrasoundIcon />
           </IconButton>
           </Tooltip>
 
           <Tooltip title="CT">
-          <IconButton onClick={() => navigate("/patients/ct")} sx={iconStyle(isActive("/patients/ct"))}>
+          <IconButton onClick={() => navigate("/dashboard/patients/ct")} sx={iconStyle(isActive("/dashboard/patients/ct"))}>
             <ScanIcon />
           </IconButton>
           </Tooltip>
 
           <Tooltip title="Doctor Referrals">
-          <IconButton onClick={() => navigate("/referrals")} sx={iconStyle(isActive("/referrals"))}>
+          <IconButton onClick={() => navigate("/dashboard/referrals")} sx={iconStyle(isActive("/dashboard/referrals"))}>
             <SettlementIcon />
           </IconButton>
           </Tooltip>
 
           <Tooltip title="Doctor Settlement">
-          <IconButton onClick={() => navigate("/doctor-settlement")} sx={iconStyle(isActive("/doctor-settlement"))}>
+          <IconButton onClick={() => navigate("/dashboard/doctor-settlement")} sx={iconStyle(isActive("/dashboard/doctor-settlement"))}>
             <PaymentIcon />
           </IconButton>
           </Tooltip>
 
           <Tooltip title="Expenses">
-          <IconButton onClick={() => navigate("/finance/expenses")} sx={iconStyle(isActive("/finance/expenses"))}>
+          <IconButton onClick={() => navigate("/dashboard/finance/expenses")} sx={iconStyle(isActive("/dashboard/finance/expenses"))}>
             <ExpenseIcon />
           </IconButton>
           </Tooltip>
 
           <Tooltip title="Extra Income">
-          <IconButton onClick={() => navigate("/finance/income")} sx={iconStyle(isActive("/finance/income"))}>
+          <IconButton onClick={() => navigate("/dashboard/finance/income")} sx={iconStyle(isActive("/dashboard/finance/income"))}>
             <IncomeIcon />
           </IconButton>
           </Tooltip>
 
           <Tooltip title="Reports">
-          <IconButton onClick={() => navigate("/reports/daily")} sx={iconStyle(isActive("/reports/daily"))}>
+          <IconButton onClick={() => navigate("/dashboard/reports/daily")} sx={iconStyle(isActive("/dashboard/reports/daily"))}>
             <ReportIcon />
           </IconButton>
           </Tooltip>
 
           <Tooltip title="Settlement History">
-          <IconButton onClick={() => navigate("/settlement-history")} sx={iconStyle(isActive("/settlement-history"))}>
+          <IconButton onClick={() => navigate("/dashboard/settlement-history")} sx={iconStyle(isActive("/dashboard/settlement-history"))}>
             <HistoryIcon />
           </IconButton>
           </Tooltip>
 
           <Tooltip title="Settings">
-          <IconButton onClick={() => navigate("/settings/signature")} sx={iconStyle(isActive("/settings"))}>
+          <IconButton onClick={() => navigate("/dashboard/settings/signature")} sx={iconStyle(isActive("/dashboard/settings"))}>
             <SettingsIcon />
           </IconButton>
           </Tooltip>
@@ -365,6 +366,7 @@ const DashboardLayout = () => {
             transition: "all 0.2s ease",
           }}
         >
+          <DemoStatus />
           <Outlet />
         </Box> 
             </Box>  );

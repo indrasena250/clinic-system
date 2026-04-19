@@ -22,6 +22,7 @@ import {
 import { CloudUpload, Image, Refresh, Delete } from "@mui/icons-material";
 import API from "../../api/axios";
 import { playSound } from "../../utils/soundUtils";
+import { useAuth } from "../../context/AuthContext";
 import { uploadSignature, getAllSignatures, deleteSignature, getClinicSettings, updateClinicSettings } from "../../api/settingsApi";
 
 const UploadSignature = () => {
@@ -45,6 +46,7 @@ const UploadSignature = () => {
   const [clinicSaving, setClinicSaving] = useState(false);
   const [clinicError, setClinicError] = useState("");
   const [clinicSuccess, setClinicSuccess] = useState("");
+  const { user, login } = useAuth();
   const [selectedSuccessSound, setSelectedSuccessSound] = useState(() => localStorage.getItem("selectedSuccessSound") || "chime");
   const [selectedErrorSound, setSelectedErrorSound] = useState(() => localStorage.getItem("selectedErrorSound") || "gentle");
   const [customSuccessSoundUrl, setCustomSuccessSoundUrl] = useState(() => localStorage.getItem("customSuccessSoundUrl") || "");
@@ -262,6 +264,17 @@ if (selected) {
     try {
       await updateClinicSettings(clinicName, clinicAddress, clinicPhone);
       setClinicSuccess("Clinic details updated successfully");
+
+      if (user) {
+        const currentToken = localStorage.getItem("token") || "";
+        login({
+          token: currentToken,
+          user: {
+            ...user,
+            clinic_name: clinicName,
+          },
+        });
+      }
     } catch (err) {
       console.error("Failed to save clinic settings:", err);
       setClinicError("Failed to save clinic details");

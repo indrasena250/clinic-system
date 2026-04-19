@@ -48,6 +48,7 @@ app.get("/", (req, res) => {
 // ROUTES
 // ===============================
 app.use("/api/auth", require("./routes/authRoutes"));
+app.use("/api/demo", require("./routes/demoRoutes"));
 app.use("/api/patients", require("./routes/patientRoutes"));
 app.use("/api/finance", require("./routes/financeRoutes"));
 app.use("/api/counter", require("./routes/counterRoutes"));
@@ -65,6 +66,30 @@ app.get("/backup", (req, res, next) => {
   }
   runBackup(req, res, next);
 });
+
+// ===============================
+// DEMO CLEANUP CRON JOB
+// ===============================
+const { cleanupExpiredDemos } = require("./controllers/demoController");
+
+// Run cleanup every 30 minutes
+setInterval(async () => {
+  try {
+    await cleanupExpiredDemos();
+  } catch (error) {
+    console.error("Demo cleanup job error:", error);
+  }
+}, 30 * 60 * 1000);
+
+// Also run cleanup on startup (delay to ensure DB connection)
+setTimeout(async () => {
+  try {
+    await cleanupExpiredDemos();
+    console.log("✓ Initial demo cleanup completed");
+  } catch (error) {
+    console.error("Initial demo cleanup error:", error);
+  }
+}, 5000);
 
 // ===============================
 // ERROR HANDLER

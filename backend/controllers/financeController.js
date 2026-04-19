@@ -1,4 +1,5 @@
 const db = require("../config/db");
+const { trackDemoData } = require("./demoController");
 const dayjs = require("dayjs");
 const utc = require("dayjs/plugin/utc");
 const timezone = require("dayjs/plugin/timezone");
@@ -18,6 +19,11 @@ exports.addExpense = async (req, res) => {
       "INSERT INTO expenses (clinic_id, expense_date, description, amount, created_at) VALUES (?, ?, ?, ?, ?)",
       [clinicId, expense_date, description, amount, istNow]
     );
+
+    // Track demo data if this is a demo user
+    if (req.user && req.user.is_demo) {
+      trackDemoData("daily_expenses", result.insertId, req.user.session_id);
+    }
 
     res.json({
       message: "Expense added",

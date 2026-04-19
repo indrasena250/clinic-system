@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { Grid, Typography, Alert, Box, Stack, Button, useTheme, useMediaQuery, Card, CardContent, LinearProgress } from "@mui/material";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import TrendingDownIcon from "@mui/icons-material/TrendingDown";
@@ -14,6 +15,7 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 
 import { fetchTodaySummary } from "../api/dashboardApi";
+import API from "../api/axios";
 import Loader from "../components/loaders/Loader";
 import KpiCard from "../components/common/KpiCard";
 import SettleButton from "../components/SettleButton";
@@ -21,15 +23,17 @@ import { useAuth } from "../context/AuthContext";
 
 const Dashboard = () => {
 
-  const { user } = useAuth();
+  const { user, login } = useAuth();
+  const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
   const [summary, setSummary] = useState(null);
-
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const silentRefreshRef = useRef(false);
+  
+
   
   // List of KPI fields that indicate actual changes
   const kpiFields = [
@@ -110,6 +114,7 @@ const Dashboard = () => {
   return (
     <Box>
 
+
 <Grid
   container
   alignItems="center"
@@ -181,22 +186,33 @@ const Dashboard = () => {
             "linear-gradient(135deg, rgba(58, 6, 180, 0.9), rgba(68, 0, 177, 0.99))",
           color: "#fff",
           fontWeight: 700,
-          fontSize: isMobile ? "0.9rem" : "1.25rem",
+          fontSize: isMobile ? "clamp(0.75rem, 2.4vw, 1rem)" : "clamp(1rem, 0.2vw, 1rem)",
           letterSpacing: "0.3px",
           boxShadow: "0 6px 20px rgba(25,118,210,0.35)",
           transition: "all 0.25s ease",
+          maxWidth: isMobile ? "100%" : "320px",
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          justifyContent: "center",
           "&:hover": {
             transform: "translateY(-2px) scale(1.02)",
           },
         }}
       >
-        <LocalHospitalIcon sx={{ fontSize: 20 }} />
+        <LocalHospitalIcon sx={{ fontSize: 20, flexShrink: 0 }} />
 
-        {user.clinic_id === 1
-          ? "Test Centre"
-          : user.clinic_id === 2
-          ? "SRIDEVI DIAGNOSTIC CENTER"
-          : user.clinic_name}
+        <Box
+          component="span"
+          sx={{
+            minWidth: 0,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {user.clinic_name || 'Clinic'}
+        </Box>
       </Box>
     )}
   </Grid>
@@ -223,7 +239,7 @@ const Dashboard = () => {
         py: 1,
         textTransform: "none",
         fontWeight: 600,
-        fontSize:  "0.9rem",
+        fontSize: "0.9rem",
         color: "#fff",
         background: "rgb(25, 118, 210)",
         border: "1px solid rgba(25,118,210,0.2)",

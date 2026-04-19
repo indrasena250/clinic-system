@@ -1,10 +1,45 @@
-import React from "react";
-import { Link } from "react-router-dom";
+import React, { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { Button, Alert, CircularProgress } from "@mui/material";
+import axios from "../api/axios";
+import { useAuth } from "../context/AuthContext";
+import { signInWithPopup } from "firebase/auth";
+import { auth, provider } from "../firebase";
 
 const Home = () => {
+  const { user, login } = useAuth();
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleGoogleLogin = async () => {
+    setError("");
+    setLoading(true);
+
+    try {
+      const result = await signInWithPopup(auth, provider);
+      const userData = result.user;
+
+      if (!userData?.email) {
+        throw new Error("Google account did not return an email.");
+      }
+
+      const response = await axios.post("/demo/create", {
+        email: userData.email
+      });
+
+      login(response.data);
+      navigate("/dashboard");
+    } catch (err) {
+      console.error("Google demo login error:", err);
+      setError(err.response?.data?.message || err.message || "Failed to start demo session");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div style={styles.container}>
-
       {/* 🔷 NAVBAR */}
       <div style={styles.navbar}>
         <h3 style={{ margin: 0 }}>Clinic System</h3>
@@ -27,12 +62,36 @@ const Home = () => {
           Manage patients, diagnostics, billing, and clinic operations efficiently.
         </p>
 
-        <Link to="/login" style={styles.primaryBtn}>
-          🚀 Try Live Demo
-        </Link>
+        {user ? (
+          <button
+            onClick={() => navigate("/dashboard")}
+            style={{
+              ...styles.primaryBtn,
+              cursor: 'pointer'
+            }}
+          >
+            Go to Dashboard
+          </button>
+        ) : (
+          <div style={styles.buttonGroup}>
+            <button
+              onClick={handleGoogleLogin}
+              style={styles.primaryBtn}
+              disabled={loading}
+            >
+              {loading ? <CircularProgress size={18} /> : "🚀 Try Free Demo"}
+            </button>
+          </div>
+        )}
         <Link to="/project" style={styles.secondaryBtn}>
-        📘 View Project Details
+          📘 View Project Details
         </Link>
+
+        {error && (
+          <Alert severity="error" sx={{ mt: 3, maxWidth: 500, mx: "auto" }}>
+            {error}
+          </Alert>
+        )}
       </section>
       <section style={styles.sectionAlt}>
         <h2 style={styles.heading}>Clinic Management System Project</h2>
@@ -139,6 +198,7 @@ const styles = {
     maxWidth: "600px",
     margin: "0 auto 20px",
   },
+
   buttonGroup: {
   display: "flex",
   justifyContent: "center",
