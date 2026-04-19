@@ -30,7 +30,7 @@ const Home = () => {
         <Link to="/login" style={styles.primaryBtn}>
           🚀 Try Live Demo
         </Link>
-        <Link to="/project" style={styles.primaryBtn}>
+        <Link to="/project" style={styles.secondaryBtn}>
         📘 View Project Details
         </Link>
       </section>
@@ -139,17 +139,35 @@ const styles = {
     maxWidth: "600px",
     margin: "0 auto 20px",
   },
+  buttonGroup: {
+  display: "flex",
+  justifyContent: "center",
+  gap: "15px",
+  flexWrap: "wrap",
+  marginTop: "20px",
+},
 
-  primaryBtn: {
-    display: "inline-block",
-    background: "#fff",
-    color: "#0400ff",
-    padding: "12px 25px",
-    borderRadius: "6px",
-    textDecoration: "none",
-    fontWeight: "bold",
-    marginTop: "10px",
-  },
+ primaryBtn: {
+  display: "inline-block",
+  background: "#fff",
+  color: "#0400ff",
+  padding: "12px 25px",
+  borderRadius: "6px",
+  textDecoration: "none",
+  fontWeight: "bold",
+  margin: "5px",   // 🔥 ADD THIS (vertical spacing)
+},
+
+secondaryBtn: {
+  display: "inline-block",
+  background: "#fff",
+  color: "#333",
+  padding: "12px 25px",
+  borderRadius: "6px",
+  textDecoration: "none",
+  fontWeight: "bold",
+  margin: "5px",   // 🔥 ADD THIS
+},
 
   /* 🔷 SECTIONS */
   section: {
