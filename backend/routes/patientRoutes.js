@@ -38,13 +38,13 @@ const uploadSignature = multer({
 });
 
 async function getSettlementWindow() {
-  // Use a fixed daily window 4:30 PM -> 4:30 PM for the current time.
-  const now = dayjs();
+  // Use a fixed daily window 4:30 PM -> 4:30 PM for the current time in IST.
+  const now = dayjs().tz("Asia/Kolkata");
   return getWindowForDate(now.format("YYYY-MM-DD"));
 }
 
 function getWindowForDate(date) {
-  const day = dayjs(date, "YYYY-MM-DD");
+  const day = dayjs.tz(date, "YYYY-MM-DD", "Asia/Kolkata");
   // For the selected date, window is: previous day 4:30 PM -> selected day 4:30 PM
   const to = day.hour(16).minute(30).second(0).millisecond(0);
   const from = to.subtract(1, "day");
@@ -53,6 +53,26 @@ function getWindowForDate(date) {
     from: from.format("YYYY-MM-DD HH:mm:ss"),
     to: to.format("YYYY-MM-DD HH:mm:ss")
   };
+}
+
+function parseIstDateTime(value) {
+  if (!value) return null;
+  if (value instanceof Date) {
+    return dayjs(value).tz("Asia/Kolkata");
+  }
+
+  const stringValue = String(value).trim();
+  if (!stringValue) return null;
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(stringValue)) {
+    return dayjs.tz(stringValue, "YYYY-MM-DD", "Asia/Kolkata");
+  }
+
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(stringValue)) {
+    return dayjs.tz(stringValue, "YYYY-MM-DD HH:mm:ss", "Asia/Kolkata");
+  }
+
+  return dayjs(stringValue).tz("Asia/Kolkata");
 }
 
 async function drawSignature(doc, pageWidth, margin, clinicId) {
@@ -157,13 +177,13 @@ const patientIds = [];
 
 for (const scan of scans) {
 
-  let finalDate = upload_date || dayjs().format("YYYY-MM-DD HH:mm:ss");
+  let finalDate = upload_date || dayjs().tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss");
 
   if (finalDate && finalDate.length === 10) {
     finalDate =
       dayjs(finalDate).format("YYYY-MM-DD") +
       " " +
-      dayjs().format("HH:mm:ss");
+      dayjs().tz("Asia/Kolkata").format("HH:mm:ss");
   }
 
   // Get next clinic-specific ID (all scans)
@@ -514,7 +534,7 @@ router.put("/:id", protect, authorize("admin"), async (req, res) => {
   if (upload_date !== undefined && upload_date !== null && upload_date !== "") {
     finalDate = upload_date;
     if (typeof upload_date === "string" && upload_date.length === 10) {
-      finalDate = dayjs(upload_date).format("YYYY-MM-DD") + " " + dayjs().format("HH:mm:ss");
+      finalDate = dayjs(upload_date).format("YYYY-MM-DD") + " " + dayjs().tz("Asia/Kolkata").format("HH:mm:ss");
     }
   }
 
@@ -947,19 +967,15 @@ router.get(
         const toTimeRaw = st.to_time;
         const createdAtRaw = st.created_at;
 
-        let settlementTo = toTimeRaw instanceof Date
-          ? dayjs(toTimeRaw).tz("Asia/Kolkata")
-          : dayjs(String(toTimeRaw)).tz("Asia/Kolkata");
+        let settlementTo = parseIstDateTime(toTimeRaw);
 
         // If to_time is missing a real time (e.g. date-only or 00:00:00), fall back to created_at
         const rawStr = typeof toTimeRaw === "string" ? toTimeRaw : "";
         const toLooksDateOnly = rawStr && rawStr.length === 10;
-        const toIsMidnight = settlementTo.isValid() && settlementTo.format("HH:mm:ss") === "00:00:00";
-        if (!settlementTo.isValid() || toLooksDateOnly || toIsMidnight) {
-          const fallback = createdAtRaw instanceof Date
-            ? dayjs(createdAtRaw).tz("Asia/Kolkata")
-            : dayjs(String(createdAtRaw)).tz("Asia/Kolkata");
-          if (fallback.isValid()) settlementTo = fallback;
+        const toIsMidnight = settlementTo?.isValid() && settlementTo.format("HH:mm:ss") === "00:00:00";
+        if (!settlementTo?.isValid() || toLooksDateOnly || toIsMidnight) {
+          const fallback = parseIstDateTime(createdAtRaw);
+          if (fallback?.isValid()) settlementTo = fallback;
         }
 
         from = settlementTo;
@@ -975,18 +991,14 @@ router.get(
           [clinicId]
         );
         const firstTimeRaw = firstPatientRows?.[0]?.first_time;
-        const firstTime = firstTimeRaw
-          ? (firstTimeRaw instanceof Date
-              ? dayjs(firstTimeRaw).tz("Asia/Kolkata")
-              : dayjs(String(firstTimeRaw)).tz("Asia/Kolkata"))
-          : null;
+        const firstTime = firstTimeRaw ? parseIstDateTime(firstTimeRaw) : null;
 
         from = firstTime && firstTime.isValid() ? firstTime : now.startOf("day");
         to = now;
       }
       
-      const fromStr = from.format("YYYY-MM-DD HH:mm:ss");
-      const toStr = to.format("YYYY-MM-DD HH:mm:ss");
+      const fromStr = from.tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss");
+      const toStr = to.tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss");
 
       let patientIncome;
       try {
@@ -1129,18 +1141,14 @@ router.get("/daily-report-pdf/:date",protect, authorize("admin"), async (req, re
             [clinicId]
           );
           const firstTimeRaw = firstPatientRows?.[0]?.first_time;
-          const firstTime = firstTimeRaw
-            ? (firstTimeRaw instanceof Date
-                ? dayjs(firstTimeRaw).tz("Asia/Kolkata")
-                : dayjs(String(firstTimeRaw)).tz("Asia/Kolkata"))
-            : null;
+          const firstTime = firstTimeRaw ? parseIstDateTime(firstTimeRaw) : null;
 
           from = firstTime && firstTime.isValid() ? firstTime : now.startOf("day");
           to = now;
         }
         
-        const fromStr = from.format("YYYY-MM-DD HH:mm:ss");
-        const toStr = to.format("YYYY-MM-DD HH:mm:ss");
+        const fromStr = from.tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss");
+        const toStr = to.tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss");
 
         let results;
         try {
@@ -1199,8 +1207,8 @@ router.get("/daily-report-pdf/:date",protect, authorize("admin"), async (req, re
             .text("Daily Financial Report", { align: "center" });
 
         doc.moveDown(0.5);
-        const dispFrom = dayjs(fromStr).tz("Asia/Kolkata").format("DD/MM/YYYY hh:mm A");
-        const dispTo = dayjs(toStr).tz("Asia/Kolkata").format("DD/MM/YYYY hh:mm A");
+        const dispFrom = from.tz("Asia/Kolkata").format("DD/MM/YYYY hh:mm A");
+        const dispTo = to.tz("Asia/Kolkata").format("DD/MM/YYYY hh:mm A");
         doc.fontSize(10).text(`Report Range: ${dispFrom} to ${dispTo}`, { align: "center" });
         doc.moveDown(2);
 
@@ -1493,11 +1501,11 @@ router.get("/settlement-pdf/:settlementId", protect, authorize("admin"), async (
         }
 
         const settlement = settlementRows[0];
-        const from = settlement.from_time instanceof Date ? dayjs(settlement.from_time).tz("Asia/Kolkata") : dayjs(String(settlement.from_time)).tz("Asia/Kolkata");
-        const to = settlement.to_time instanceof Date ? dayjs(settlement.to_time).tz("Asia/Kolkata") : dayjs(String(settlement.to_time)).tz("Asia/Kolkata");
+        const from = parseIstDateTime(settlement.from_time);
+        const to = parseIstDateTime(settlement.to_time);
 
-        const fromStr = from.format("YYYY-MM-DD HH:mm:ss");
-        const toStr = to.format("YYYY-MM-DD HH:mm:ss");
+        const fromStr = from?.tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss") || "";
+        const toStr = to?.tz("Asia/Kolkata").format("YYYY-MM-DD HH:mm:ss") || "";
 
         let results;
         try {

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Button, Alert, CircularProgress } from "@mui/material";
+import { Button, Alert, CircularProgress, Dialog, DialogTitle, DialogContent, DialogActions } from "@mui/material";
 import axios from "../api/axios";
 import { useAuth } from "../context/AuthContext";
 import { signInWithPopup } from "firebase/auth";
@@ -11,6 +11,7 @@ const Home = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [expiredDialogOpen, setExpiredDialogOpen] = useState(false);
 
   const handleGoogleLogin = async () => {
     setError("");
@@ -32,10 +33,21 @@ const Home = () => {
       navigate("/dashboard");
     } catch (err) {
       console.error("Google demo login error:", err);
-      setError(err.response?.data?.message || err.message || "Failed to start demo session");
+      
+      // Check if demo has expired
+      if (err.response?.data?.demo_expired) {
+        setExpiredDialogOpen(true);
+        setError("");
+      } else {
+        setError(err.response?.data?.message || err.message || "Failed to start demo session");
+      }
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCloseExpiredDialog = () => {
+    setExpiredDialogOpen(false);
   };
 
   return (
@@ -137,6 +149,47 @@ const Home = () => {
       <footer style={styles.footer}>
         <p>© 2026 Clinic System</p>
       </footer>
+
+      {/* Demo Expired Dialog */}
+      <Dialog
+        open={expiredDialogOpen}
+        onClose={handleCloseExpiredDialog}
+        PaperProps={{
+          sx: {
+            borderRadius: 2,
+            boxShadow: "0 20px 60px rgba(0, 0, 0, 0.3)",
+          }
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 700, fontSize: "18px", color: "#d32f2f" }}>
+          ⏰ Free Demo Limit Expired
+        </DialogTitle>
+        <DialogContent sx={{ py: 2 }}>
+          <p style={{ fontSize: "16px", color: "#333", margin: "10px 0" }}>
+            Your free trial period has ended. You have already used your 8-hour free demo access.
+          </p>
+          <p style={{ fontSize: "16px", color: "#333", margin: "10px 0", fontWeight: 500 }}>
+            To continue using the system, please contact the admin for registration and premium access.
+          </p>
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button
+            onClick={handleCloseExpiredDialog}
+            sx={{
+              background: "linear-gradient(135deg, #3b82f6 0%, #1e40af 100%)",
+              color: "#fff",
+              fontWeight: 600,
+              px: 3,
+              "&:hover": {
+                boxShadow: "0 8px 24px rgba(59, 130, 246, 0.3)",
+              }
+            }}
+            variant="contained"
+          >
+            OK
+          </Button>
+        </DialogActions>
+      </Dialog>
     </div>
   );
 };

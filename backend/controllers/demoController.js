@@ -1,6 +1,18 @@
 const db = require("../config/db");
 const generateToken = require("../utils/generateToken");
 const crypto = require("crypto");
+const dayjs = require("dayjs");
+const utc = require("dayjs/plugin/utc");
+const timezone = require("dayjs/plugin/timezone");
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
+const formatIstDateTime = (value) => {
+  if (!value) return null;
+  const parsed = value instanceof Date ? dayjs(value) : dayjs(String(value));
+  return parsed.isValid() ? parsed.tz("Asia/Kolkata").format("YYYY-MM-DDTHH:mm:ssZ") : null;
+};
 
 // Demo duration in hours
 const DEMO_DURATION_HOURS = 8; // 8 hours as a middle ground between 5-10
@@ -72,6 +84,20 @@ exports.createDemoSession = async (req, res) => {
             });
         }
 
+        // Check if user has an EXPIRED demo session
+        const [expiredSessions] = await db.query(
+            `SELECT * FROM demo_sessions WHERE email = ? AND is_active = TRUE AND expires_at < NOW()`,
+            [email]
+        );
+
+        if (expiredSessions.length > 0) {
+            return res.status(403).json({
+                message: 'Your free limit is over. Kindly contact admin for registration.',
+                expired: true,
+                demo_expired: true
+            });
+        }
+
         // Generate session ID
         const sessionId = generateSessionId();
         const expiresAt = new Date(Date.now() + DEMO_DURATION_HOURS * 60 * 60 * 1000);
@@ -90,7 +116,9 @@ exports.createDemoSession = async (req, res) => {
             );
 
             // Create a demo clinic for this session
-            const demoClinicName = `Demo Clinic - ${sessionId.substring(0, 8)}`;
+            // Extract email name (before @) for clinic name
+            const emailName = email.split('@')[0];
+            const demoClinicName = emailName;
             const [clinicResult] = await connection.query(
                 `INSERT INTO clinics (name, address, phone, created_at)
                  VALUES (?, ?, ?, CONVERT_TZ(NOW(), '+00:00', '+05:30'))`,
@@ -219,6 +247,7 @@ exports.trackDemoData = async (tableName, recordId, sessionId) => {
 };
 
 // Clean up demo data when session expires
+// NOTE: Demo tracking data is kept permanently to track who used the demo
 const cleanupDemoData = async (sessionId) => {
     try {
         // Get all tracked data for this session
@@ -254,11 +283,9 @@ const cleanupDemoData = async (sessionId) => {
             [sessionId]
         );
 
-        // Clean up tracking records
-        await db.query(
-            `DELETE FROM demo_data_tracking WHERE session_id = ?`,
-            [sessionId]
-        );
+        // IMPORTANT: DO NOT DELETE demo_data_tracking records
+        // Keep them permanently to track who used the demo system
+        // This allows admin to see all demo trial users even after expiration
 
     } catch (error) {
         // Silent error handling
@@ -289,14 +316,16 @@ exports.getDemoInfo = async (req, res) => {
         }
 
         const session = rows[0];
-        const now = new Date();
-        const expiresAt = new Date(session.expires_at);
-        const timeLeft = Math.max(0, expiresAt - now);
+        const now = dayjs().tz("Asia/Kolkata");
+        const expiresAt = formatIstDateTime(session.expires_at)
+          ? dayjs.tz(String(session.expires_at), "Asia/Kolkata")
+          : null;
+        const timeLeft = expiresAt ? Math.max(0, expiresAt.valueOf() - now.valueOf()) : 0;
 
         const responseData = {
             session_id: session.session_id,
-            created_at: session.created_at,
-            expires_at: session.expires_at,
+            created_at: formatIstDateTime(session.created_at),
+            expires_at: formatIstDateTime(session.expires_at),
             time_left_hours: Math.floor(timeLeft / (1000 * 60 * 60)),
             time_left_minutes: Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60)),
             is_active: session.is_active

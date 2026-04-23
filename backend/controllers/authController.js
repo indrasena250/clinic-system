@@ -1,6 +1,18 @@
 const bcrypt = require("bcrypt");
 const db = require("../config/db");
 const generateToken = require("../utils/generateToken");
+const dayjs = require("dayjs");
+const utc = require("dayjs/plugin/utc");
+const timezone = require("dayjs/plugin/timezone");
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
+
+const formatIstDateTime = (value) => {
+  if (!value) return null;
+  const parsed = value instanceof Date ? dayjs(value) : dayjs(String(value));
+  return parsed.isValid() ? parsed.tz("Asia/Kolkata").format("YYYY-MM-DDTHH:mm:ssZ") : null;
+};
 
 exports.login = async (req, res) => {
     try {
@@ -149,7 +161,9 @@ exports.demoEmailLogin = async (req, res) => {
             let clinic;
             if (!clinicRows || clinicRows.length === 0) {
                 // Create a new demo clinic for this existing session
-                const demoClinicName = `Demo - ${session.session_id.substring(0, 8)}`;
+                // Extract email name (before @) for clinic name
+                const emailName = email.split('@')[0];
+                const demoClinicName = emailName;
                 const [clinicResult] = await db.query(
                     `INSERT INTO clinics (name, address, phone, created_at) VALUES (?, ?, ?, NOW())`,
                     [demoClinicName, 'Demo Address', 'Demo Phone']
@@ -190,8 +204,22 @@ exports.demoEmailLogin = async (req, res) => {
             return res.json({
                 token,
                 user: demoUser,
-                expires_at: session.expires_at,
+                expires_at: formatIstDateTime(session.expires_at),
                 message: `Welcome back! Continuing your demo session.`
+            });
+        }
+
+        // Check if user has an EXPIRED demo session
+        const [expiredSessions] = await db.query(
+            `SELECT * FROM demo_sessions WHERE email = ? AND is_active = TRUE AND expires_at < NOW()`,
+            [email]
+        );
+
+        if (expiredSessions.length > 0) {
+            return res.status(403).json({
+                message: 'Your free limit is over. Kindly contact admin for registration.',
+                expired: true,
+                demo_expired: true
             });
         }
 
@@ -213,7 +241,9 @@ exports.demoEmailLogin = async (req, res) => {
             );
 
             // Create a demo clinic for this session
-            const demoClinicName = `Demo - ${sessionId.substring(0, 8)}`;
+            // Extract email name (before @) for clinic name
+            const emailName = email.split('@')[0];
+            const demoClinicName = emailName;
             const [clinicResult] = await connection.query(
                 `INSERT INTO clinics (name, address, phone, created_at)
                  VALUES (?, ?, ?, CONVERT_TZ(NOW(), '+00:00', '+05:30'))`,
@@ -261,7 +291,7 @@ exports.demoEmailLogin = async (req, res) => {
             res.json({
                 token,
                 user: demoUser,
-                expires_at: storedExpiresAt,
+                expires_at: formatIstDateTime(storedExpiresAt),
                 message: `Welcome! You have ${DEMO_DURATION_HOURS} hours of free access to explore the system.`
             });
         } catch (transactionError) {

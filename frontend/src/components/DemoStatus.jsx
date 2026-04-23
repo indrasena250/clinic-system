@@ -1,6 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from '../api/axios';
 import { useAuth } from '../context/AuthContext';
+import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 const DemoStatus = () => {
   const { user, logout } = useAuth();
@@ -56,9 +62,12 @@ const DemoStatus = () => {
   const calculateDemoTime = () => {
     if (!user?.expires_at) return null;
 
-    const now = new Date();
-    const expiresAt = new Date(user.expires_at);
-    const diffMs = expiresAt - now;
+    const now = dayjs().tz('Asia/Kolkata');
+    const expiresAt = dayjs.tz(user.expires_at, 'Asia/Kolkata');
+
+    if (!expiresAt.isValid()) return null;
+
+    const diffMs = expiresAt.valueOf() - now.valueOf();
 
     if (diffMs <= 0) return { hours: 0, minutes: 0, seconds: 0, expired: true };
 
