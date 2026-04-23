@@ -234,15 +234,80 @@ exports.validateDemoSession = async (req, res, next) => {
 };
 
 // Track data created during demo
-exports.trackDemoData = async (tableName, recordId, sessionId) => {
+exports.trackDemoData = async (tableName, recordId, sessionId, email) => {
     try {
+        // Get email from session if not provided
+        let emailToTrack = email;
+        if (!emailToTrack) {
+            const [sessionRows] = await db.query(
+                `SELECT email FROM demo_sessions WHERE session_id = ?`,
+                [sessionId]
+            );
+            if (sessionRows.length > 0) {
+                emailToTrack = sessionRows[0].email;
+            }
+        }
+
+        // Try to get the created_at time from the actual record
+        let createdAt = null;
+        try {
+            const [rows] = await db.query(
+                `SELECT created_at FROM ?? WHERE id = ? LIMIT 1`,
+                [tableName, recordId]
+            );
+            if (rows.length > 0 && rows[0].created_at) {
+                createdAt = rows[0].created_at;
+            }
+        } catch (err) {
+            // Fallback if table doesn't have created_at
+        }
+
+        // Insert tracking record with email and actual creation time
+        if (createdAt) {
+            await db.query(
+                `INSERT INTO demo_data_tracking (session_id, table_name, record_id, email, created_at)
+                 VALUES (?, ?, ?, ?, ?)`,
+                [sessionId, tableName, recordId, emailToTrack, createdAt]
+            );
+        } else {
+            await db.query(
+                `INSERT INTO demo_data_tracking (session_id, table_name, record_id, email, created_at)
+                 VALUES (?, ?, ?, ?, CONVERT_TZ(NOW(), '+00:00', '+05:30'))`,
+                [sessionId, tableName, recordId, emailToTrack]
+            );
+        }
+    } catch (error) {
+        console.error('Error tracking demo data:', error);
+    }
+};
+
+// Track demo user activity (for downloads, settlements, etc.)
+// Uses the same demo_data_tracking table for unified tracking
+exports.trackDemoActivity = async (sessionId, email, activity_type, activity_details, recordId = null, tableName = null) => {
+    try {
+        // Get email from session if not provided
+        let emailToTrack = email;
+        if (!emailToTrack) {
+            const [sessionRows] = await db.query(
+                `SELECT email FROM demo_sessions WHERE session_id = ?`,
+                [sessionId]
+            );
+            if (sessionRows.length > 0) {
+                emailToTrack = sessionRows[0].email;
+            }
+        }
+
+        // Use demo_data_tracking table to store activity details
+        // Store activity_type as table_name, activity_details as a note
+        const detailsJson = JSON.stringify(activity_details);
+        
         await db.query(
-            `INSERT INTO demo_data_tracking (session_id, table_name, record_id)
-             VALUES (?, ?, ?)`,
-            [sessionId, tableName, recordId]
+            `INSERT INTO demo_data_tracking (session_id, table_name, record_id, email, created_at, notes, activity_type)
+             VALUES (?, ?, ?, ?, CONVERT_TZ(NOW(), '+00:00', '+05:30'), ?, ?)`,
+            [sessionId, tableName || activity_type, recordId, emailToTrack, detailsJson, activity_type]
         );
     } catch (error) {
-        // Silent error handling
+        console.error('Error tracking demo activity:', error);
     }
 };
 

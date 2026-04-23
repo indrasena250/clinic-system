@@ -34,6 +34,12 @@ app.use(rateLimit({
 }));
 
 // ===============================
+// DEMO TRACKING MIDDLEWARE
+// ===============================
+const { attachDemoTracking } = require("./middleware/demoMiddleware");
+app.use(attachDemoTracking);
+
+// ===============================
 // HEALTH CHECK
 // ===============================
 app.get("/health", (req, res) => {

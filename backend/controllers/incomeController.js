@@ -1,5 +1,6 @@
 const db = require("../config/db");
 const { trackDemoData } = require("./demoController");
+const demoTrackingService = require("../services/demoTrackingService");
 const dayjs = require("dayjs");
 const utc = require("dayjs/plugin/utc");
 const timezone = require("dayjs/plugin/timezone");
@@ -23,6 +24,22 @@ exports.addIncome = async (req, res) => {
     // Track demo data if this is a demo user
     if (req.user && req.user.is_demo) {
       trackDemoData("extra_income", result.insertId, req.user.session_id);
+      
+      // Also track activity for comprehensive demo tracking
+      if (req.user.session_id) {
+        demoTrackingService.trackExtraIncome(
+          req.user.session_id,
+          null,
+          'created',
+          {
+            income_date: income_date,
+            income_type: income_type,
+            description: description,
+            amount: amount
+          },
+          result.insertId
+        );
+      }
     }
 
     res.json({
@@ -60,6 +77,18 @@ exports.deleteIncome = async (req, res) => {
     const id = req.params.id;
     const [r] = await db.query("DELETE FROM extra_income WHERE id = ? AND clinic_id = ?", [id, clinicId]);
     if (r.affectedRows === 0) return res.status(404).json({ message: "Income not found" });
+    
+    // Track demo activity if demo user
+    if (req.user?.is_demo && req.user?.session_id) {
+      demoTrackingService.trackExtraIncome(
+        req.user.session_id,
+        null,
+        'deleted',
+        { income_id: id },
+        id
+      );
+    }
+    
     res.json({ message: "Income deleted successfully" });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -79,6 +108,23 @@ exports.updateIncome = async (req, res) => {
     );
 
     if (r.affectedRows === 0) return res.status(404).json({ message: "Income not found" });
+    
+    // Track demo activity if demo user
+    if (req.user?.is_demo && req.user?.session_id) {
+      demoTrackingService.trackExtraIncome(
+        req.user.session_id,
+        null,
+        'updated',
+        {
+          income_date: income_date,
+          income_type: income_type,
+          description: description,
+          amount: amount
+        },
+        id
+      );
+    }
+    
     res.json({ message: "Income updated successfully" });
   } catch (error) {
     console.error("Update Income Error:", error);

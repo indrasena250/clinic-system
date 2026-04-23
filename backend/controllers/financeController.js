@@ -1,5 +1,6 @@
 const db = require("../config/db");
 const { trackDemoData } = require("./demoController");
+const demoTrackingService = require("../services/demoTrackingService");
 const dayjs = require("dayjs");
 const utc = require("dayjs/plugin/utc");
 const timezone = require("dayjs/plugin/timezone");
@@ -23,6 +24,21 @@ exports.addExpense = async (req, res) => {
     // Track demo data if this is a demo user
     if (req.user && req.user.is_demo) {
       trackDemoData("daily_expenses", result.insertId, req.user.session_id);
+      
+      // Also track activity for comprehensive demo tracking
+      if (req.user.session_id) {
+        demoTrackingService.trackDailyExpense(
+          req.user.session_id,
+          null,
+          'created',
+          {
+            description: description,
+            amount: amount,
+            expense_date: expense_date
+          },
+          result.insertId
+        );
+      }
     }
 
     res.json({
@@ -57,6 +73,18 @@ exports.deleteExpense = async (req, res) => {
     const id = req.params.id;
     const [r] = await db.query("DELETE FROM expenses WHERE id = ? AND clinic_id = ?", [id, clinicId]);
     if (r.affectedRows === 0) return res.status(404).json({ message: "Expense not found" });
+    
+    // Track demo activity if demo user
+    if (req.user?.is_demo && req.user?.session_id) {
+      demoTrackingService.trackDailyExpense(
+        req.user.session_id,
+        null,
+        'deleted',
+        { expense_id: id },
+        id
+      );
+    }
+    
     res.json({ message: "Expense deleted" });
 
   } catch (error) {
@@ -75,6 +103,22 @@ exports.updateExpense = async (req, res) => {
       [expense_date, description, amount, id, clinicId]
     );
     if (r.affectedRows === 0) return res.status(404).json({ message: "Expense not found" });
+    
+    // Track demo activity if demo user
+    if (req.user?.is_demo && req.user?.session_id) {
+      demoTrackingService.trackDailyExpense(
+        req.user.session_id,
+        null,
+        'updated',
+        {
+          description: description,
+          amount: amount,
+          expense_date: expense_date
+        },
+        id
+      );
+    }
+    
     res.json({ message: "Expense updated" });
   } catch (error) {
     res.status(500).json({ error: error.message });

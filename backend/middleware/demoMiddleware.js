@@ -1,4 +1,5 @@
-const { trackDemoData } = require("../controllers/demoController");
+const { trackDemoData, trackDemoActivity } = require("../controllers/demoController");
+const db = require("../config/db");
 
 // Middleware to track data created during demo sessions
 exports.trackDemoDataMiddleware = (tableName) => {
@@ -25,7 +26,15 @@ exports.trackDemoDataMiddleware = (tableName) => {
                     }
 
                     if (recordId) {
-                        trackDemoData(tableName, recordId, req.user.session_id);
+                        // Pass email from demo session to tracking function
+                        const sessionId = req.user.session_id;
+                        db.query(
+                            `SELECT email FROM demo_sessions WHERE session_id = ?`,
+                            [sessionId]
+                        ).then(([sessionRows]) => {
+                            const email = sessionRows.length > 0 ? sessionRows[0].email : null;
+                            trackDemoData(tableName, recordId, sessionId, email);
+                        }).catch(err => console.error('Error getting session email:', err));
                     }
                 } catch (error) {
                     // Ignore parsing errors
@@ -38,4 +47,14 @@ exports.trackDemoDataMiddleware = (tableName) => {
 
         next();
     };
+};
+
+// Middleware to make tracking functions available in request object
+exports.attachDemoTracking = (req, res, next) => {
+    if (req.user && req.user.is_demo) {
+        req.trackActivity = (activity_type, activity_details, recordId, tableName) => {
+            trackDemoActivity(req.user.session_id, null, activity_type, activity_details, recordId, tableName);
+        };
+    }
+    next();
 };

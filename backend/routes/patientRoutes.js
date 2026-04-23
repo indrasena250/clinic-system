@@ -2,6 +2,7 @@ const { authorize } = require("../middleware/roleMiddleware");
 const { protect } = require("../middleware/authMiddleware");
 const { validateDemoSession, trackDemoData } = require("../controllers/demoController");
 const { trackDemoDataMiddleware } = require("../middleware/demoMiddleware");
+const demoTrackingService = require("../services/demoTrackingService");
 const express = require("express");
 const router = express.Router();
 const db = require("../config/db");
@@ -910,6 +911,18 @@ async (req, res) => {
       doc.moveDown(2);
 
       await drawSignature(doc, pageWidth, margin, clinicId);
+      
+      // Track demo activity if demo user
+      if (req.user?.is_demo && req.user?.session_id) {
+        demoTrackingService.trackPdfDownload(
+          req.user.session_id,
+          null,
+          `${doctor}-settlement.pdf`,
+          null,
+          'doctor_settlement'
+        );
+      }
+      
       doc.end();
 
     } catch (error) {
@@ -1468,6 +1481,23 @@ doc.moveTo(labelX, lineY2)
    .stroke();
             doc.moveDown(0.5);
             await drawSignature(doc, pageWidth, margin, clinicId);
+            
+            // Track demo activity if demo user
+            if (req.user?.is_demo && req.user?.session_id) {
+              const reportDate = dayjs(date, "YYYY-MM-DD", true).isValid()
+                ? dayjs(date, "YYYY-MM-DD").format("DD-MM-YYYY")
+                : dayjs(date).isValid()
+                  ? dayjs(date).format("DD-MM-YYYY")
+                  : String(date);
+              demoTrackingService.trackPdfDownload(
+                req.user.session_id,
+                null,
+                `${reportDate} REPORT.pdf`,
+                null,
+                'daily_report'
+              );
+            }
+            
             doc.end();
 
         } catch (error) {
@@ -1807,6 +1837,18 @@ yPos += 25;
 doc.moveTo(leftX, yPos).lineTo(pageWidth - margin, yPos).stroke();
         doc.moveDown(1);
         await drawSignature(doc, pageWidth, margin, clinicId);
+        
+        // Track demo activity if demo user
+        if (req.user?.is_demo && req.user?.session_id) {
+          demoTrackingService.trackPdfDownload(
+            req.user.session_id,
+            null,
+            `settlement-report-${settlementId}-${from.format("YYYY-MM-DD")}.pdf`,
+            settlementId,
+            'settlement'
+          );
+        }
+        
         doc.end();
 
     } catch (error) {
@@ -2442,6 +2484,18 @@ router.get("/invoice/pdf/:invoiceId", protect, authorize("admin", "staff"), asyn
 
     // ================= SIGNATURE (COPIED FROM YOUR REPORT) =================
     await drawSignature(doc, pageWidth, margin, clinicId);
+    
+    // Track demo activity if demo user
+    if (req.user?.is_demo && req.user?.session_id) {
+      demoTrackingService.trackPdfDownload(
+        req.user.session_id,
+        null,
+        `invoice-${invoiceId}.pdf`,
+        invoiceId,
+        'invoice'
+      );
+    }
+    
     doc.end();
   } catch (err) {
     console.error(err);

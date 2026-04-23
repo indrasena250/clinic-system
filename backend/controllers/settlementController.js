@@ -4,6 +4,7 @@
  */
 
 const settlementService = require("../services/settlementService");
+const demoTrackingService = require("../services/demoTrackingService");
 
 /**
  * POST /api/settle
@@ -25,6 +26,24 @@ async function settle(req, res) {
     }
     
     const result = await settlementService.executeSettlement(clinicId);
+
+    // Track demo activity if demo user
+    if (req.user?.is_demo && req.user?.session_id) {
+      demoTrackingService.trackSettlement(
+        req.user.session_id,
+        null, // email will be fetched from session
+        'created',
+        {
+          income: result.income,
+          expenses: result.expenses,
+          extra_income: result.extraIncome,
+          settlement_amount: result.settlementAmount,
+          from_time: result.from_time,
+          to_time: result.to_time
+        },
+        result.settlementId // This should be available from executeSettlement
+      );
+    }
 
     res.status(201).json({
       success: true,
